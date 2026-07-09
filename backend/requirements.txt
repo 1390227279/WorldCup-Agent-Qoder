@@ -1,0 +1,37 @@
+# WorldCup Agent Predictor - Backend Dependencies
+# Python 3.11+
+
+# Web Framework
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+
+# Database
+sqlalchemy==2.0.30
+aiosqlite==0.20.0
+
+# Data Processing
+pandas==2.2.2
+numpy==1.26.4
+scipy==1.13.1
+
+# Data Validation
+pydantic==2.7.3
+
+# Qwen API (Alibaba Cloud DashScope)
+dashscope==1.20.0
+
+# Resilience
+tenacity==8.3.0
+
+# Logging
+structlog==24.2.0
+
+# Testing
+pytest==8.2.2
+pytest-asyncio==0.23.7
+httpx==0.27.0
+
+# Dev
+black==24.4.2
+isort==5.13.2
+mypy==1.10.0

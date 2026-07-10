@@ -361,7 +361,12 @@ function MatchDetailCard({
    Main Component
    ================================================================ */
 
-export default function BracketTree({ root }: { root?: BracketNode | null }) {
+interface BracketTreeProps {
+  root?: BracketNode | null;
+  onMatchClick?: (match: Match, prediction: AgentPrediction | null) => void;
+}
+
+export default function BracketTree({ root, onMatchClick }: BracketTreeProps) {
   const [hoveredId, setHoveredId] = useState<number | null>(null);
 
   // Use provided tree or generate demo data
@@ -462,6 +467,7 @@ export default function BracketTree({ root }: { root?: BracketNode | null }) {
                 transition={{ delay, duration: 0.4, ease: "easeOut" }}
                 onMouseEnter={() => setHoveredId(match.id)}
                 onMouseLeave={() => setHoveredId(null)}
+                onClick={() => onMatchClick?.(match, prediction)}
                 style={{ cursor: "pointer" }}
               >
                 {/* Background rect */}

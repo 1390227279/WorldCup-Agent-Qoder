@@ -94,3 +94,53 @@ export interface SimulationResult {
   most_likely_path: BracketNode | null;
   iterations: number;
 }
+
+/* ── API Response types ── */
+
+/** POST /predictions/match 响应 */
+export interface MatchPredictionResponse {
+  home_team: string;
+  away_team: string;
+  is_valid: boolean;
+  is_agent: boolean;
+  model_used: string;
+  errors: string[];
+  warnings: string[];
+  prediction: ValidatedPredictionData | null;
+  circuit_breaker: Record<string, unknown>;
+}
+
+export interface ValidatedPredictionData {
+  winner: string;
+  predicted_score: string;
+  confidence: number;
+  key_factors: string[];
+  reasoning_chain: ReasoningStep[];
+  tool_calls_log: ToolCallRecord[];
+}
+
+/** GET /bracket 响应 */
+export interface BracketResponse {
+  stages: Record<string, BracketStage>;
+  total_matches: number;
+}
+
+export interface BracketStage {
+  label: string;
+  matches: Match[];
+}
+
+/** GET /bracket/team/{id} 响应 */
+export interface TeamBracketPath {
+  team: Team;
+  knockout_path: KnockoutStep[];
+}
+
+export interface KnockoutStep {
+  stage: string;
+  round_name: string;
+  opponent: Team | null;
+  result: "W" | "L" | "D" | null;
+  score: string | null;
+  match_id: number;
+}

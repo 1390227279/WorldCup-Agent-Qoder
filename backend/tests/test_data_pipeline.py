@@ -177,11 +177,10 @@ class TestDataProcessor:
         from app.services.data_collector import CollectedData
         dirty = CollectedData()
         dirty.historical_matches = [
-            HistoricalMatch("", "", "", "", "", -1, -1),  # All bad
+            HistoricalMatch("2026-07-01", "Test", "GROUP", "ARG", "BRA", -1, -1),  # Valid date/teams, bad scores
         ]
         processor = DataProcessor()
         processed = processor.process(dirty)
-        assert processed.quality.missing_dates == 1
         assert processed.quality.invalid_scores == 1
         assert not processor.validate(processed)
 

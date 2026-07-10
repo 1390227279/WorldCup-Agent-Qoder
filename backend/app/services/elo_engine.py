@@ -198,9 +198,9 @@ def process_match_history(
             rating_away=away_elo,
             home_goals=match.home_goals,
             away_goals=match.away_goals,
-            is_neutral=match.is_neutral_venue,
+            is_neutral=match.is_neutral,
             is_knockout=match.is_knockout,
-            weight=match.weight,
+            weight=getattr(match, "weight", 1.0),
         )
 
         ratings[match.home_team] = update_home.new_rating

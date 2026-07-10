@@ -6,7 +6,7 @@
 import logging
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 from app.models.database import get_db
 from app.models.match import Match
 from app.models.team import Team
+from app.services.monte_carlo import get_engine
 
 logger = logging.getLogger(__name__)
 
@@ -183,7 +184,36 @@ async def get_team_bracket_path(
 
 
 @router.get("/simulation")
-async def get_simulation_results():
-    """Return Monte Carlo simulation results (champion probabilities)."""
-    # 桩 — Phase 4 实现
-    return {"message": "Phase 4 实现"}
+async def get_simulation_results(
+    refresh: bool = Query(False, description="强制重新计算（忽略缓存）"),
+    iterations: int = Query(1000, ge=100, le=10000, description="模拟次数"),
+    db: AsyncSession = Depends(get_db),
+):
+    """返回蒙特卡洛模拟的冠军概率分布。
+
+    首次请求会执行 1000 次完整赛事模拟（约 1 秒），
+    后续请求走缓存，添加 ?refresh=true 强制重算。
+
+    Response:
+        {
+            "champion_probs": {"Argentina": 0.152, "France": 0.138, ...},
+            "top3": [["Argentina", 0.152], ["France", 0.138], ["Brazil", 0.121]],
+            "iterations": 1000
+        }
+    """
+    result = await db.execute(select(Team))
+    teams = result.scalars().all()
+
+    if not teams:
+        return {"champion_probs": {}, "top3": [], "iterations": 0}
+
+    teams_data = [t.to_dict() for t in teams]
+
+    engine = get_engine()
+    sim_result = engine.run(
+        teams=teams_data,
+        iterations=iterations,
+        force_refresh=refresh,
+    )
+
+    return sim_result

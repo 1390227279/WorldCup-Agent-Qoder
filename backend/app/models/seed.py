@@ -249,10 +249,11 @@ async def seed_all(session: AsyncSession):
     await session.flush()
 
     for data in EVENTS_SEED:
-        code = data.pop("fifa_code")
+        code = data["fifa_code"]
         team = team_map.get(code)
         if team:
-            event = Event(team_id=team.id, **data)
+            event_data = {k: v for k, v in data.items() if k != "fifa_code"}
+            event = Event(team_id=team.id, **event_data)
             session.add(event)
 
     await session.commit()

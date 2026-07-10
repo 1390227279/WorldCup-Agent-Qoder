@@ -26,6 +26,8 @@ export interface Match {
   home_score: number | null;
   away_score: number | null;
   is_simulated: boolean;
+  match_order?: number | null;
+  prediction?: AgentPrediction | null;
 }
 
 export interface AgentPrediction {
@@ -38,6 +40,16 @@ export interface AgentPrediction {
   reasoning_chain: ReasoningStep[] | null;
   is_agent: boolean;
   model_used: string | null;
+  tool_calls_log?: ToolCallRecord[] | null;
+  created_at?: string | null;
+}
+
+export interface ToolCallRecord {
+  tool_name: string;
+  input_params: Record<string, unknown>;
+  output_summary: string;
+  execution_time_ms: number;
+  success: boolean;
 }
 
 export interface ReasoningStep {
@@ -58,12 +70,16 @@ export interface Event {
   impact: Record<string, number> | null;
   source: string | null;
   active: boolean;
+  created_at?: string | null;
 }
 
 export interface BracketNode {
   match: Match;
   prediction: AgentPrediction | null;
-  children: [BracketNode, BracketNode] | null;
+  left: BracketNode | null;
+  right: BracketNode | null;
+  depth: number;
+  children?: [BracketNode, BracketNode] | null;
 }
 
 export interface ChampionPrediction {

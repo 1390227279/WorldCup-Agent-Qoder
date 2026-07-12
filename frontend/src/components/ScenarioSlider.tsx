@@ -1,195 +1,124 @@
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect } from "react";
+import { api } from "../services/api";
+import type { Event, Team } from "../types";
 
-/* ================================================================
-   Types & Data
-   ================================================================ */
-
-export interface Scenario {
-  id: string;
-  label: string;
-  emoji: string;
-  description: string;
-  /** 受影响的球队及其 ELO 调整（攻击力 / 防守力偏移百分比） */
-  effects: Record<string, { attack_mod: number; defense_mod: number }>;
+interface ScenarioSliderProps {
+  selectedEventIds: number[];
+  onChange: (ids: number[]) => void;
 }
 
-export const SCENARIOS: Scenario[] = [
-  {
-    id: "default",
-    label: "默认",
-    emoji: "⚽",
-    description: "所有事件按现状，无额外干预",
-    effects: {},
-  },
-  {
-    id: "mbappe-out",
-    label: "姆巴佩缺阵",
-    emoji: "🇫🇷",
-    description: "法国核心前锋伤缺，攻击力显著下降",
-    effects: { France: { attack_mod: -0.15, defense_mod: 0 } },
-  },
-  {
-    id: "brazil-coach",
-    label: "巴西换帅",
-    emoji: "🇧🇷",
-    description: "巴西临阵换帅，战术凝聚力下降",
-    effects: { Brazil: { attack_mod: -0.08, defense_mod: -0.1 } },
-  },
-  {
-    id: "messi-peak",
-    label: "梅西巅峰",
-    emoji: "🇦🇷",
-    description: "梅西状态火热，阿根廷攻击力大幅上升",
-    effects: { Argentina: { attack_mod: 0.18, defense_mod: 0 } },
-  },
-  {
-    id: "england-tactics",
-    label: "英格兰新战术",
-    emoji: "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
-    description: "英格兰防守反击体系增强",
-    effects: { England: { attack_mod: 0.05, defense_mod: 0.12 } },
-  },
-];
+const SEVERITY_COLOR: Record<string, string> = {
+  CRITICAL: "#ef4444",
+  MAJOR: "#f5c518",
+  MINOR: "#3b82f6",
+};
 
-/* ================================================================
-   Component
-   ================================================================ */
+export default function ScenarioSlider({ selectedEventIds, onChange }: ScenarioSliderProps) {
+  const [events, setEvents] = useState<Event[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [loading, setLoading] = useState(true);
 
-interface Props {
-  /** 当前选中的情景 ID，默认 "default" */
-  defaultId?: string;
-  /** 切换情景时的回调 */
-  onChange?: (scenario: Scenario) => void;
-}
+  useEffect(() => {
+    Promise.all([api.getEvents(), api.getTeams()])
+      .then(([evts, tms]) => {
+        setEvents(evts);
+        setTeams(tms);
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
-export default function ScenarioSlider({
-  defaultId = "default",
-  onChange,
-}: Props) {
-  const [activeId, setActiveId] = useState(defaultId);
+  const teamNameMap: Record<number, string> = {};
+  for (const t of teams) {
+    teamNameMap[t.id] = t.name_cn || t.name;
+  }
 
-  const handleSelect = (scenario: Scenario) => {
-    setActiveId(scenario.id);
-    onChange?.(scenario);
+  const activeEvents = events.filter((e) => e.active);
+  const selectedSet = new Set(selectedEventIds);
+
+  const toggleEvent = (id: number) => {
+    if (selectedSet.has(id)) {
+      onChange(selectedEventIds.filter((x) => x !== id));
+    } else {
+      onChange([...selectedEventIds, id]);
+    }
   };
 
-  const activeScenario = SCENARIOS.find((s) => s.id === activeId) ?? SCENARIOS[0];
+  if (loading) {
+    return (
+      <div style={{ padding: "16px 0" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+          <span style={{ fontSize: 12, color: "var(--color-text-muted)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+            事件影响
+          </span>
+          <div style={{ flex: 1, height: 1, background: "var(--color-text-muted)", opacity: 0.2 }} />
+        </div>
+        <p style={{ color: "var(--color-text-muted)", fontSize: 13 }}>加载事件列表…</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="mb-6">
-      {/* Label */}
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-text-muted)]">
-          情景切换
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-muted)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+          事件影响
         </span>
-        <div className="flex-1 h-px bg-[var(--color-text-muted)] opacity-20" />
-      </div>
-
-      {/* Scenario buttons */}
-      <div className="flex flex-wrap gap-2">
-        {SCENARIOS.map((scenario) => {
-          const isActive = scenario.id === activeId;
-
-          return (
-            <motion.button
-              key={scenario.id}
-              onClick={() => handleSelect(scenario)}
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.97 }}
-              className="relative rounded-lg px-4 py-2.5 text-sm font-medium transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-gold)]"
-              style={{
-                background: isActive
-                  ? "linear-gradient(135deg, rgba(245,197,24,0.15) 0%, rgba(233,69,96,0.1) 100%)"
-                  : "var(--color-surface)",
-                border: isActive
-                  ? "1.5px solid var(--color-gold)"
-                  : "1.5px solid transparent",
-                color: isActive
-                  ? "var(--color-gold)"
-                  : "var(--color-text-muted)",
-                boxShadow: isActive
-                  ? "0 0 16px rgba(245,197,24,0.12)"
-                  : "none",
-              }}
-            >
-              <span className="mr-1.5">{scenario.emoji}</span>
-              {scenario.label}
-
-              {/* Active indicator dot */}
-              <AnimatePresence>
-                {isActive && (
-                  <motion.span
-                    layoutId="scenario-indicator"
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    exit={{ scale: 0 }}
-                    transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                    className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[var(--color-gold)]"
-                  />
-                )}
-              </AnimatePresence>
-            </motion.button>
-          );
-        })}
-      </div>
-
-      {/* Description with AnimatePresence */}
-      <div className="mt-3 h-8 overflow-hidden">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeId}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.2 }}
-            className="flex items-center gap-2 text-sm"
+        <div style={{ flex: 1, height: 1, background: "var(--color-text-muted)", opacity: 0.2 }} />
+        {selectedEventIds.length > 0 && (
+          <button
+            onClick={() => onChange([])}
+            style={{
+              fontSize: 12,
+              color: "var(--color-text-muted)",
+              background: "none",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 6,
+              padding: "3px 10px",
+              cursor: "pointer",
+            }}
           >
-            <span className="text-base">{activeScenario.emoji}</span>
-            <span className="text-[var(--color-text)] font-medium">
-              {activeScenario.label}
-            </span>
-            <span className="text-[var(--color-text-muted)]">—</span>
-            <span className="text-[var(--color-text-muted)]">
-              {activeScenario.description}
-            </span>
+            重置全部
+          </button>
+        )}
+      </div>
 
-            {/* Affected teams badges */}
-            {Object.keys(activeScenario.effects).length > 0 && (
-              <span className="ml-2 flex gap-1.5">
-                {Object.entries(activeScenario.effects).map(([team, fx]) => (
-                  <span
-                    key={team}
-                    className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-mono"
-                    style={{
-                      background: "var(--color-bg)",
-                      color:
-                        fx.attack_mod > 0
-                          ? "#4ade80"
-                          : fx.attack_mod < 0
-                            ? "#f87171"
-                            : "var(--color-text-muted)",
-                    }}
-                  >
-                    {team}
-                    {fx.attack_mod !== 0 && (
-                      <span>
-                        ATK{fx.attack_mod > 0 ? "+" : ""}
-                        {Math.round(fx.attack_mod * 100)}%
-                      </span>
-                    )}
-                    {fx.defense_mod !== 0 && (
-                      <span>
-                        DEF{fx.defense_mod > 0 ? "+" : ""}
-                        {Math.round(fx.defense_mod * 100)}%
-                      </span>
-                    )}
-                  </span>
-                ))}
-              </span>
-            )}
-          </motion.div>
-        </AnimatePresence>
+      {activeEvents.length === 0 ? (
+        <p style={{ color: "var(--color-text-muted)", fontSize: 13 }}>暂无活跃事件</p>
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {activeEvents.map((evt) => {
+            const isSelected = selectedSet.has(evt.id);
+            const color = SEVERITY_COLOR[evt.severity] ?? "#888";
+            const teamName = evt.team_name ?? teamNameMap[evt.team_id] ?? "?";
+            return (
+              <button
+                key={evt.id}
+                onClick={() => toggleEvent(evt.id)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "5px 12px",
+                  borderRadius: 20,
+                  fontSize: 13,
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                  background: isSelected ? `${color}22` : "transparent",
+                  border: isSelected ? `1.5px solid ${color}` : "1.5px solid rgba(255,255,255,0.15)",
+                  color: isSelected ? color : "var(--color-text-muted)",
+                }}
+              >
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                <span>{teamName}</span>
+                <span style={{ opacity: 0.7, fontSize: 12 }}>{evt.title}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div style={{ marginTop: 10, fontSize: 12, color: "var(--color-text-muted)" }}>
+        已选 <span style={{ color: "var(--color-text)", fontWeight: 600 }}>{selectedEventIds.length}</span> 个事件
       </div>
     </div>
   );

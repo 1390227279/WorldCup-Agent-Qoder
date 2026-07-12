@@ -3,6 +3,7 @@
 import time
 import threading
 from collections import defaultdict
+from typing import Optional
 
 import numpy as np
 
@@ -29,9 +30,16 @@ class MonteCarloEngine:
         self._rng = np.random.default_rng()
 
     def run(self, teams: list[dict], iterations: int = 1000,
-            force_refresh: bool = False) -> dict:
+            force_refresh: bool = False,
+            team_impacts: Optional[dict] = None) -> dict:
         cache_key = ",".join(sorted(t["name"] for t in teams))
         cache_key = f"{cache_key}:{iterations}"
+        if team_impacts:
+            impact_str = ",".join(f"{k}:{v}" for k, v in sorted(
+                (code, f"{imp.get('attack',0):.2f},{imp.get('defense',0):.2f}")
+                for code, imp in team_impacts.items()
+            ))
+            cache_key = f"{cache_key}:imp({impact_str})"
 
         with self._lock:
             if not force_refresh and cache_key in self._cache:
@@ -43,7 +51,8 @@ class MonteCarloEngine:
         for t in teams:
             tid2info[t["id"]] = (
                 t["name"], t["name_cn"],
-                t["elo_rating"] or 1500.0, t["group_name"]
+                t["elo_rating"] or 1500.0, t["group_name"],
+                t.get("fifa_code", "")
             )
         team_ids = list(tid2info.keys())
 
@@ -51,7 +60,7 @@ class MonteCarloEngine:
         rng = self._rng
 
         for _ in range(iterations):
-            champ = self._sim_one(team_ids, tid2info, rng)
+            champ = self._sim_one(team_ids, tid2info, rng, team_impacts)
             champion_counts[champ] += 1
 
         total = max(sum(champion_counts.values()), 1)
@@ -69,11 +78,11 @@ class MonteCarloEngine:
 
         return result
 
-    def _sim_one(self, team_ids, tid2info, rng):
+    def _sim_one(self, team_ids, tid2info, rng, team_impacts=None):
         # Group stage setup: list of [tid, name, cn, elo, pts, gf, ga, gd]
         groups = {g: [] for g in GROUP_NAMES}
         for tid in team_ids:
-            name, cn, elo, grp = tid2info[tid]
+            name, cn, elo, grp, _code = tid2info[tid]
             groups[grp].append([tid, name, cn, elo, 0, 0, 0, 0])
 
         for grp_records in groups.values():
@@ -85,8 +94,19 @@ class MonteCarloEngine:
                         a, b = ri, rj
                     else:
                         a, b = rj, ri
-                    hg = int(rng.poisson(_eg(a[3], b[3])))
-                    ag = int(rng.poisson(_eg(b[3], a[3])))
+                    lambda_home = _eg(a[3], b[3])
+                    lambda_away = _eg(b[3], a[3])
+                    if team_impacts:
+                        home_code = tid2info[a[0]][4]
+                        away_code = tid2info[b[0]][4]
+                        home_imp = team_impacts.get(home_code, {})
+                        away_imp = team_impacts.get(away_code, {})
+                        lambda_home *= (1.0 + home_imp.get("attack", 0.0)) * (1.0 + away_imp.get("defense", 0.0))
+                        lambda_away *= (1.0 + away_imp.get("attack", 0.0)) * (1.0 + home_imp.get("defense", 0.0))
+                        lambda_home = max(lambda_home, 0.05)
+                        lambda_away = max(lambda_away, 0.05)
+                    hg = int(rng.poisson(lambda_home))
+                    ag = int(rng.poisson(lambda_away))
                     if hg > ag:
                         a[4] += 3
                     elif ag > hg:
@@ -117,8 +137,19 @@ class MonteCarloEngine:
                 a, b = current[k], current[k + 1]
                 if rng.random() < 0.5:
                     a, b = b, a
-                hg = int(rng.poisson(_eg(a[3], b[3])))
-                ag = int(rng.poisson(_eg(b[3], a[3])))
+                lambda_home = _eg(a[3], b[3])
+                lambda_away = _eg(b[3], a[3])
+                if team_impacts:
+                    home_code = tid2info[a[0]][4]
+                    away_code = tid2info[b[0]][4]
+                    home_imp = team_impacts.get(home_code, {})
+                    away_imp = team_impacts.get(away_code, {})
+                    lambda_home *= (1.0 + home_imp.get("attack", 0.0)) * (1.0 + away_imp.get("defense", 0.0))
+                    lambda_away *= (1.0 + away_imp.get("attack", 0.0)) * (1.0 + home_imp.get("defense", 0.0))
+                    lambda_home = max(lambda_home, 0.05)
+                    lambda_away = max(lambda_away, 0.05)
+                hg = int(rng.poisson(lambda_home))
+                ag = int(rng.poisson(lambda_away))
                 if hg > ag:
                     winners.append(a)
                 elif ag > hg:
@@ -130,8 +161,19 @@ class MonteCarloEngine:
         a, b = current[0], current[1]
         if rng.random() < 0.5:
             a, b = b, a
-        hg = int(rng.poisson(_eg(a[3], b[3])))
-        ag = int(rng.poisson(_eg(b[3], a[3])))
+        lambda_home = _eg(a[3], b[3])
+        lambda_away = _eg(b[3], a[3])
+        if team_impacts:
+            home_code = tid2info[a[0]][4]
+            away_code = tid2info[b[0]][4]
+            home_imp = team_impacts.get(home_code, {})
+            away_imp = team_impacts.get(away_code, {})
+            lambda_home *= (1.0 + home_imp.get("attack", 0.0)) * (1.0 + away_imp.get("defense", 0.0))
+            lambda_away *= (1.0 + away_imp.get("attack", 0.0)) * (1.0 + home_imp.get("defense", 0.0))
+            lambda_home = max(lambda_home, 0.05)
+            lambda_away = max(lambda_away, 0.05)
+        hg = int(rng.poisson(lambda_home))
+        ag = int(rng.poisson(lambda_away))
         if hg > ag:
             return a[1]
         elif ag > hg:
@@ -139,7 +181,7 @@ class MonteCarloEngine:
         return a[1] if a[3] >= b[3] else b[1]
 
 
-_engine: MonteCarloEngine | None = None
+_engine: Optional[MonteCarloEngine] = None
 
 
 def get_engine() -> MonteCarloEngine:

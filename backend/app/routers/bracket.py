@@ -71,6 +71,7 @@ async def get_bracket(db: AsyncSession = Depends(get_db)):
     for m in matches:
         match_data = {
             "id": m.id,
+            "stage": m.stage,
             "round_name": m.round_name,
             "home_team": m.home_team.to_dict() if m.home_team else None,
             "away_team": m.away_team.to_dict() if m.away_team else None,
@@ -185,35 +186,51 @@ async def get_team_bracket_path(
 
 @router.get("/simulation")
 async def get_simulation_results(
-    refresh: bool = Query(False, description="强制重新计算（忽略缓存）"),
     iterations: int = Query(1000, ge=100, le=10000, description="模拟次数"),
+    refresh: bool = Query(False, description="强制重新计算（忽略缓存）"),
+    event_ids: str = Query("", description="逗号分隔的事件ID"),
     db: AsyncSession = Depends(get_db),
 ):
-    """返回蒙特卡洛模拟的冠军概率分布。
-
-    首次请求会执行 1000 次完整赛事模拟（约 1 秒），
-    后续请求走缓存，添加 ?refresh=true 强制重算。
-
-    Response:
-        {
-            "champion_probs": {"Argentina": 0.152, "France": 0.138, ...},
-            "top3": [["Argentina", 0.152], ["France", 0.138], ["Brazil", 0.121]],
-            "iterations": 1000
-        }
-    """
-    result = await db.execute(select(Team))
-    teams = result.scalars().all()
-
+    """运行 Monte Carlo 模拟，返回夺冠概率。"""
+    # 1. 获取所有球队
+    teams_result = await db.execute(select(Team))
+    teams = teams_result.scalars().all()
     if not teams:
-        return {"champion_probs": {}, "top3": [], "iterations": 0}
+        return {"error": "No teams available"}
 
-    teams_data = [t.to_dict() for t in teams]
+    # 2. 处理事件影响
+    team_impacts = None
+    if event_ids:
+        from app.models.event import Event
+        ids = [int(x.strip()) for x in event_ids.split(",") if x.strip().isdigit()]
+        if ids:
+            events_result = await db.execute(
+                select(Event).where(Event.id.in_(ids), Event.active == True)
+            )
+            events = events_result.scalars().all()
+            impact_map: dict = defaultdict(lambda: {"attack": 0.0, "defense": 0.0})
+            for ev in events:
+                if ev.team and ev.impact:
+                    code = ev.team.fifa_code
+                    for key, val in ev.impact.items():
+                        if isinstance(val, (int, float)):
+                            impact_map[code][key] = impact_map[code].get(key, 0.0) + val
+            team_impacts = dict(impact_map)
 
+    # 3. 构建球队数据
+    teams_data = []
+    for t in teams:
+        teams_data.append({
+            "id": t.id,
+            "name": t.name,
+            "name_cn": t.name_cn,
+            "fifa_code": t.fifa_code,
+            "elo_rating": t.elo_rating,
+            "group_name": t.group_name,
+        })
+
+    # 4. 运行模拟
     engine = get_engine()
-    sim_result = engine.run(
-        teams=teams_data,
-        iterations=iterations,
-        force_refresh=refresh,
-    )
-
-    return sim_result
+    result = engine.run(teams_data, iterations=iterations,
+                        force_refresh=refresh, team_impacts=team_impacts)
+    return result

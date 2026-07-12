@@ -71,6 +71,28 @@ export interface Event {
   source: string | null;
   active: boolean;
   created_at?: string | null;
+  team_name?: string;
+  fifa_code?: string;
+  type_label?: string;
+  severity_label?: string;
+}
+
+export interface EventCreate {
+  team_id: number;
+  type: string;
+  title: string;
+  description?: string;
+  severity?: string;
+  impact?: Record<string, number>;
+  source?: string;
+}
+
+export interface EventUpdate {
+  title?: string;
+  description?: string;
+  severity?: string;
+  impact?: Record<string, number>;
+  active?: boolean;
 }
 
 export interface BracketNode {
@@ -91,7 +113,7 @@ export interface ChampionPrediction {
 export interface SimulationResult {
   champion_probs: Record<string, number>;
   top3: [string, number][];
-  most_likely_path: BracketNode | null;
+  most_likely_path?: BracketNode | null;
   iterations: number;
 }
 

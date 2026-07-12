@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../services/api";
 import ChampionHero from "../components/ChampionHero";
 import ProbabilityBar from "../components/ProbabilityBar";
-import type { Team, SimulationResult } from "../types";
+import type { SimulationResult } from "../types";
 
 export default function HomePage() {
   const { data: teams } = useQuery({

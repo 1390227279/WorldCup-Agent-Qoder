@@ -46,9 +46,9 @@ async def db_session():
 @pytest_asyncio.fixture(autouse=True)
 def reset_prediction_breaker():
     """每个测试前重置预测路由的全局熔断器。"""
-    from app.routers.predictions import _prediction_service
+    from app.routers.predictions import _get_prediction_service
 
-    _prediction_service.breaker.reset()
+    _get_prediction_service().breaker.reset()
 
 
 @pytest_asyncio.fixture
@@ -110,6 +110,22 @@ class TestPredictionsEndpoint:
         assert "is_valid" in body
         assert "prediction" in body
         assert "circuit_breaker" in body
+
+    async def test_predict_match_falls_back_to_fifa_code(self, client):
+        """Stale bracket IDs can be recovered using stable FIFA codes."""
+        resp = await client.post(
+            "/api/v1/predictions/match",
+            json={
+                "home_team_id": 99991,
+                "away_team_id": 99992,
+                "home_team_code": "USA",
+                "away_team_code": "NED",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["home_team"] == "United States"
+        assert body["away_team"] == "Netherlands"
 
 
 class TestBracketEndpoint:

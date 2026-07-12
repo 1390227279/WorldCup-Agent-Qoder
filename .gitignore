@@ -6,3 +6,6 @@ __pycache__/
 *.db
 .DS_Store
 self/
+shots/
+shootphotos/
+screenshots/

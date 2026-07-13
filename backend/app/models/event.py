@@ -19,8 +19,14 @@ class Event(Base):
     severity = Column(String(10), nullable=False, default="MINOR")  # CRITICAL, MAJOR, MINOR
     impact = Column(JSON, nullable=True)  # {"attack": -0.20, "defense": 0, "cohesion": -0.10}
     source = Column(String(200), nullable=True)
+    source_type = Column(String(30), nullable=False, default="MANUAL")
+    source_url = Column(String(500), nullable=True)
+    external_id = Column(String(200), nullable=True, index=True)
+    effective_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=True)
     active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     team = relationship("Team", back_populates="events")
 
@@ -34,6 +40,12 @@ class Event(Base):
             "severity": self.severity,
             "impact": self.impact,
             "source": self.source,
+            "source_type": self.source_type,
+            "source_url": self.source_url,
+            "external_id": self.external_id,
+            "effective_at": self.effective_at.isoformat() if self.effective_at else None,
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
             "active": self.active,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

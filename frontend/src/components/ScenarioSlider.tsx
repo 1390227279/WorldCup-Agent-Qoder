@@ -1,125 +1,198 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../services/api";
 import type { Event, Team } from "../types";
 
 interface ScenarioSliderProps {
   selectedEventIds: number[];
-  onChange: (ids: number[]) => void;
+  onChange: (ids: number[]) => void | Promise<void>;
 }
 
-const SEVERITY_COLOR: Record<string, string> = {
-  CRITICAL: "#ef4444",
-  MAJOR: "#f5c518",
-  MINOR: "#3b82f6",
+const PAGE_SIZE = 20;
+const SEVERITY_LABELS: Record<string, string> = {
+  CRITICAL: "严重",
+  MAJOR: "重要",
+  MINOR: "一般",
 };
 
 export default function ScenarioSlider({ selectedEventIds, onChange }: ScenarioSliderProps) {
   const [events, setEvents] = useState<Event[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [draftIds, setDraftIds] = useState<number[]>([]);
+  const [search, setSearch] = useState("");
+  const [teamFilter, setTeamFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [severityFilter, setSeverityFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const [applying, setApplying] = useState(false);
 
   useEffect(() => {
-    Promise.all([api.getEvents(), api.getTeams()])
-      .then(([evts, tms]) => {
-        setEvents(evts);
-        setTeams(tms);
+    Promise.all([api.getEvents({ active_only: true, current_only: true }), api.getTeams()])
+      .then(([eventData, teamData]) => {
+        setEvents(eventData);
+        setTeams(teamData);
       })
       .finally(() => setLoading(false));
   }, []);
 
-  const teamNameMap: Record<number, string> = {};
-  for (const t of teams) {
-    teamNameMap[t.id] = t.name_cn || t.name;
-  }
+  const teamById = useMemo(
+    () => new Map(teams.map((team) => [team.id, team])),
+    [teams],
+  );
+  const eventById = useMemo(
+    () => new Map(events.map((event) => [event.id, event])),
+    [events],
+  );
+  const activeEvents = useMemo(() => events.filter((event) => event.active), [events]);
+  const draftSet = useMemo(() => new Set(draftIds), [draftIds]);
 
-  const activeEvents = events.filter((e) => e.active);
-  const selectedSet = new Set(selectedEventIds);
+  const filteredEvents = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    return activeEvents
+      .filter((event) => {
+        const team = teamById.get(event.team_id);
+        const matchesSearch = !keyword || [event.title, event.description, team?.name_cn, team?.name]
+          .some((value) => value?.toLowerCase().includes(keyword));
+        return matchesSearch
+          && (!teamFilter || event.team_id === Number(teamFilter))
+          && (!typeFilter || event.type === typeFilter)
+          && (!severityFilter || event.severity === severityFilter);
+      })
+      .sort((a, b) => Number(draftSet.has(b.id)) - Number(draftSet.has(a.id)));
+  }, [activeEvents, draftSet, search, severityFilter, teamById, teamFilter, typeFilter]);
 
-  const toggleEvent = (id: number) => {
-    if (selectedSet.has(id)) {
-      onChange(selectedEventIds.filter((x) => x !== id));
-    } else {
-      onChange([...selectedEventIds, id]);
-    }
+  useEffect(() => setPage(1), [search, teamFilter, typeFilter, severityFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredEvents.length / PAGE_SIZE));
+  const visibleEvents = filteredEvents.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const selectedEvents = selectedEventIds
+    .map((id) => eventById.get(id))
+    .filter((event): event is Event => Boolean(event));
+
+  const showDrawer = () => {
+    setDraftIds(selectedEventIds);
+    setOpen(true);
   };
 
-  if (loading) {
-    return (
-      <div style={{ padding: "16px 0" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-          <span style={{ fontSize: 12, color: "var(--color-text-muted)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-            事件影响
-          </span>
-          <div style={{ flex: 1, height: 1, background: "var(--color-text-muted)", opacity: 0.2 }} />
-        </div>
-        <p style={{ color: "var(--color-text-muted)", fontSize: 13 }}>加载事件列表…</p>
-      </div>
-    );
-  }
+  const toggleDraft = (eventId: number) => {
+    setDraftIds((current) => current.includes(eventId)
+      ? current.filter((id) => id !== eventId)
+      : [...current, eventId]);
+  };
 
   return (
-    <div style={{ marginBottom: 24 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-muted)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-          事件影响
-        </span>
-        <div style={{ flex: 1, height: 1, background: "var(--color-text-muted)", opacity: 0.2 }} />
+    <div className="mb-4">
+      <div className="flex flex-wrap items-center gap-2 rounded-xl bg-[var(--color-surface)] px-3 py-2">
+        <span className="text-sm font-semibold">事件影响</span>
+        <span className="text-xs text-[var(--color-text-muted)]">已选择 {selectedEventIds.length} 项</span>
+        <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
+          {selectedEvents.slice(0, 3).map((event) => (
+            <span key={event.id} className="max-w-48 truncate rounded-full bg-[var(--color-primary)]/15 px-2.5 py-1 text-xs text-[var(--color-primary)]">
+              {event.team_name ?? teamById.get(event.team_id)?.name_cn}：{event.title}
+            </span>
+          ))}
+          {selectedEvents.length > 3 && (
+            <span className="rounded-full bg-[var(--color-bg)] px-2.5 py-1 text-xs text-[var(--color-text-muted)]">
+              另有 {selectedEvents.length - 3} 项
+            </span>
+          )}
+        </div>
         {selectedEventIds.length > 0 && (
-          <button
-            onClick={() => onChange([])}
-            style={{
-              fontSize: 12,
-              color: "var(--color-text-muted)",
-              background: "none",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 6,
-              padding: "3px 10px",
-              cursor: "pointer",
-            }}
-          >
-            重置全部
+          <button onClick={() => void onChange([])} className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
+            清空
           </button>
         )}
+        <button onClick={showDrawer} disabled={loading} className="rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs text-white disabled:opacity-50">
+          {loading ? "加载中…" : "选择事件"}
+        </button>
       </div>
 
-      {activeEvents.length === 0 ? (
-        <p style={{ color: "var(--color-text-muted)", fontSize: 13 }}>暂无活跃事件</p>
-      ) : (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {activeEvents.map((evt) => {
-            const isSelected = selectedSet.has(evt.id);
-            const color = SEVERITY_COLOR[evt.severity] ?? "#888";
-            const teamName = evt.team_name ?? teamNameMap[evt.team_id] ?? "?";
-            return (
-              <button
-                key={evt.id}
-                onClick={() => toggleEvent(evt.id)}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "5px 12px",
-                  borderRadius: 20,
-                  fontSize: 13,
-                  cursor: "pointer",
-                  transition: "all 0.15s",
-                  background: isSelected ? `${color}22` : "transparent",
-                  border: isSelected ? `1.5px solid ${color}` : "1.5px solid rgba(255,255,255,0.15)",
-                  color: isSelected ? color : "var(--color-text-muted)",
-                }}
-              >
-                <span style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }} />
-                <span>{teamName}</span>
-                <span style={{ opacity: 0.7, fontSize: 12 }}>{evt.title}</span>
-              </button>
-            );
-          })}
+      {open && (
+        <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
+          <button aria-label="关闭事件选择" onClick={() => setOpen(false)} className="absolute inset-0 bg-black/60" />
+          <aside className="relative flex h-full w-full max-w-[520px] flex-col bg-[var(--color-surface)] shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-bold">选择赛事事件</h2>
+                <p className="text-xs text-[var(--color-text-muted)]">已选择 {draftIds.length} 项，应用后重新模拟</p>
+              </div>
+              <button onClick={() => setOpen(false)} className="text-sm text-[var(--color-text-muted)]">关闭</button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 border-b border-white/10 p-4">
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索球队或事件" className="col-span-2 rounded-lg bg-[var(--color-bg)] px-3 py-2 text-sm" />
+              <select value={teamFilter} onChange={(event) => setTeamFilter(event.target.value)} className="rounded-lg bg-[var(--color-bg)] px-3 py-2 text-sm">
+                <option value="">全部球队</option>
+                {teams.map((team) => <option key={team.id} value={team.id}>{team.name_cn}</option>)}
+              </select>
+              <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="rounded-lg bg-[var(--color-bg)] px-3 py-2 text-sm">
+                <option value="">全部类型</option>
+                <option value="INJURY">伤病</option>
+                <option value="COACHING">教练变动</option>
+                <option value="TACTICAL">战术调整</option>
+                <option value="MORALE">士气</option>
+                <option value="OTHER">其他</option>
+              </select>
+              <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)} className="col-span-2 rounded-lg bg-[var(--color-bg)] px-3 py-2 text-sm">
+                <option value="">全部严重程度</option>
+                <option value="CRITICAL">严重</option>
+                <option value="MAJOR">重要</option>
+                <option value="MINOR">一般</option>
+              </select>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              {visibleEvents.length === 0 ? (
+                <p className="py-12 text-center text-sm text-[var(--color-text-muted)]">没有符合条件的事件</p>
+              ) : visibleEvents.map((event) => {
+                const selected = draftSet.has(event.id);
+                const team = teamById.get(event.team_id);
+                return (
+                  <button key={event.id} onClick={() => toggleDraft(event.id)} className={`mb-2 w-full rounded-lg border p-3 text-left ${selected ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10" : "border-white/10 bg-[var(--color-bg)]"}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">{team?.name_cn ?? event.team_name} · {event.title}</p>
+                        <p className="mt-1 line-clamp-2 text-xs text-[var(--color-text-muted)]">{event.description || "暂无详细描述"}</p>
+                      </div>
+                      <span className="shrink-0 rounded-full px-2 py-0.5 text-xs text-[var(--color-text-muted)]">{SEVERITY_LABELS[event.severity] ?? event.severity}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="border-t border-white/10 p-4">
+              <div className="mb-3 flex items-center justify-between text-xs text-[var(--color-text-muted)]">
+                <span>共 {filteredEvents.length} 项</span>
+                <div className="flex items-center gap-2">
+                  <button disabled={page <= 1} onClick={() => setPage((value) => value - 1)} className="disabled:opacity-30">上一页</button>
+                  <span>{page} / {totalPages}</span>
+                  <button disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)} className="disabled:opacity-30">下一页</button>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setOpen(false)} className="flex-1 rounded-lg border border-white/15 py-2 text-sm">取消</button>
+                <button
+                  disabled={applying}
+                  onClick={async () => {
+                    setApplying(true);
+                    try {
+                      await onChange(draftIds);
+                      setOpen(false);
+                    } finally {
+                      setApplying(false);
+                    }
+                  }}
+                  className="flex-1 rounded-lg bg-[var(--color-primary)] py-2 text-sm text-white disabled:opacity-50"
+                >
+                  {applying ? "模拟中…" : "应用并重新模拟"}
+                </button>
+              </div>
+            </div>
+          </aside>
         </div>
       )}
-
-      <div style={{ marginTop: 10, fontSize: 12, color: "var(--color-text-muted)" }}>
-        已选 <span style={{ color: "var(--color-text)", fontWeight: 600 }}>{selectedEventIds.length}</span> 个事件
-      </div>
     </div>
   );
 }

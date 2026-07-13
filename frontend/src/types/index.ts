@@ -28,6 +28,9 @@ export interface Match {
   is_simulated: boolean;
   match_order?: number | null;
   prediction?: AgentPrediction | null;
+  match_key?: string;
+  winner_team_id?: number;
+  winner?: string;
 }
 
 export interface AgentPrediction {
@@ -53,8 +56,8 @@ export interface ToolCallRecord {
 }
 
 export interface ReasoningStep {
-  step: number;
-  tool?: string;
+  step_number: number;
+  tool_used?: string | null;
   finding?: string;
   analysis?: string;
   conclusion?: string;
@@ -69,8 +72,14 @@ export interface Event {
   severity: string;
   impact: Record<string, number> | null;
   source: string | null;
+  source_type?: string;
+  source_url?: string | null;
+  external_id?: string | null;
+  effective_at?: string | null;
+  expires_at?: string | null;
   active: boolean;
   created_at?: string | null;
+  updated_at?: string | null;
   team_name?: string;
   fifa_code?: string;
   type_label?: string;
@@ -85,6 +94,11 @@ export interface EventCreate {
   severity?: string;
   impact?: Record<string, number>;
   source?: string;
+  source_type?: string;
+  source_url?: string;
+  external_id?: string;
+  effective_at?: string;
+  expires_at?: string;
 }
 
 export interface EventUpdate {
@@ -93,6 +107,22 @@ export interface EventUpdate {
   severity?: string;
   impact?: Record<string, number>;
   active?: boolean;
+  source?: string;
+  source_type?: string;
+  source_url?: string;
+  external_id?: string;
+  effective_at?: string;
+  expires_at?: string;
+}
+
+export interface EventImportResult {
+  filename: string;
+  total: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  errors: Array<{ row: number; error: string }>;
 }
 
 export interface BracketNode {
@@ -111,10 +141,14 @@ export interface ChampionPrediction {
 }
 
 export interface SimulationResult {
+  simulation_id: string;
+  seed: number;
+  event_ids: number[];
   champion_probs: Record<string, number>;
   top3: [string, number][];
-  most_likely_path?: BracketNode | null;
   iterations: number;
+  predicted_champion: string;
+  stages: Record<string, BracketStage>;
 }
 
 /* ── API Response types ── */

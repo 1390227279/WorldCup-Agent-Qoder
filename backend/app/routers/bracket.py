@@ -5,9 +5,10 @@
 
 import logging
 from collections import defaultdict
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -204,8 +205,13 @@ async def get_simulation_results(
         from app.models.event import Event
         ids = [int(x.strip()) for x in event_ids.split(",") if x.strip().isdigit()]
         if ids:
+            now = datetime.utcnow()
             events_result = await db.execute(
-                select(Event).where(Event.id.in_(ids), Event.active == True)
+                select(Event).where(
+                    Event.id.in_(ids), Event.active == True,
+                    or_(Event.effective_at.is_(None), Event.effective_at <= now),
+                    or_(Event.expires_at.is_(None), Event.expires_at > now),
+                )
             )
             events = events_result.scalars().all()
             impact_map: dict = defaultdict(lambda: {"attack": 0.0, "defense": 0.0})
@@ -225,12 +231,17 @@ async def get_simulation_results(
             "name": t.name,
             "name_cn": t.name_cn,
             "fifa_code": t.fifa_code,
+            "confederation": t.confederation,
+            "fifa_ranking": t.fifa_ranking,
             "elo_rating": t.elo_rating,
             "group_name": t.group_name,
+            "pot": t.pot,
+            "stats": t.stats,
         })
 
     # 4. 运行模拟
     engine = get_engine()
     result = engine.run(teams_data, iterations=iterations,
-                        force_refresh=refresh, team_impacts=team_impacts)
+                        force_refresh=refresh, team_impacts=team_impacts,
+                        event_ids=ids if event_ids else [])
     return result

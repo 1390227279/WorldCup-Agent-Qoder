@@ -17,6 +17,8 @@ async def init_db():
     """Create all tables and load seed data on startup."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        from app.models.migrations import run_migrations
+        await conn.run_sync(run_migrations)
 
     # Seed data loading
     from app.models.seed import seed_all

@@ -4,7 +4,6 @@ import type {
   Match,
   AgentPrediction,
   BracketStage,
-  Team,
 } from "../types";
 
 const STAGES = ["R32", "R16", "QF", "SF", "FINAL"] as const;
@@ -58,109 +57,24 @@ interface FlatMatch {
   feederIndices: [number, number] | null;
 }
 
-function predictedWinner(
-  match: Match,
-  prediction: AgentPrediction | null,
-  championProbs?: Record<string, number>,
-): Team | null {
-  const home = match.home_team;
-  const away = match.away_team;
-  if (!home || !away) return null;
-
-  if (match.home_score != null && match.away_score != null) {
-    if (match.home_score > match.away_score) return home;
-    if (match.away_score > match.home_score) return away;
-  }
-  if (prediction?.winner === home.name) return home;
-  if (prediction?.winner === away.name) return away;
-
-  const homeProbability = championProbs?.[home.name] ?? 0;
-  const awayProbability = championProbs?.[away.name] ?? 0;
-  if (homeProbability !== awayProbability) {
-    return homeProbability > awayProbability ? home : away;
-  }
-  return (home.elo_rating ?? 0) >= (away.elo_rating ?? 0) ? home : away;
-}
-
 function buildFlatMatches(
   stages: Record<string, BracketStage> | null,
-  championProbs?: Record<string, number>,
-  teams?: Team[],
 ): FlatMatch[] {
   const stageOrder = ["R32", "R16", "QF", "SF", "FINAL"];
   const result: FlatMatch[] = [];
-
-  const teamsByName = new Map<string, Team>();
-  teams?.forEach((team) => teamsByName.set(team.name, team));
-  if (stages) {
-    Object.values(stages).forEach((stage) => stage.matches.forEach((match) => {
-      if (match.home_team) teamsByName.set(match.home_team.name, match.home_team);
-      if (match.away_team) teamsByName.set(match.away_team.name, match.away_team);
-    }));
-  }
-
-  const storedFirstRound = stages?.R32?.matches?.slice(0, 16) ?? [];
-  if (storedFirstRound.length) {
-    storedFirstRound.forEach((match, matchIdx) => result.push({
-      match,
-      prediction: match.prediction ?? null,
-      stageIdx: 0,
-      matchIdx,
-      feederIndices: null,
-    }));
-  } else if (championProbs) {
-    const sorted = Object.entries(championProbs).sort((a, b) => b[1] - a[1]).slice(0, 32);
-    for (let i = 0; i < 16; i++) {
-      const homeName = sorted[i * 2]?.[0] ?? "TBD";
-      const awayName = sorted[i * 2 + 1]?.[0] ?? "TBD";
+  if (!stages) return result;
+  stageOrder.forEach((stageName, stageIdx) => {
+    const matches = stages[stageName]?.matches ?? [];
+    matches.slice(0, matchCount(stageIdx)).forEach((match, matchIdx) => {
       result.push({
-        match: {
-          id: -(i + 1), stage: "R32", round_name: "32 强",
-          home_team: teamsByName.get(homeName) ?? null,
-          away_team: teamsByName.get(awayName) ?? null,
-          home_score: null, away_score: null, is_simulated: false,
-        },
-        prediction: null, stageIdx: 0, matchIdx: i, feederIndices: null,
-      });
-    }
-  }
-
-  for (let stageIdx = 1; stageIdx < stageOrder.length; stageIdx++) {
-    const previous = result.filter((fm) => fm.stageIdx === stageIdx - 1);
-    const storedMatches = stages?.[stageOrder[stageIdx]]?.matches ?? [];
-    for (let matchIdx = 0; matchIdx < matchCount(stageIdx); matchIdx++) {
-      const stored = storedMatches[matchIdx];
-      if (stored?.home_team && stored?.away_team) {
-        result.push({
-          match: stored,
-          prediction: stored.prediction ?? null,
-          stageIdx,
-          matchIdx,
-          feederIndices: [matchIdx * 2, matchIdx * 2 + 1],
-        });
-        continue;
-      }
-
-      const left = previous[matchIdx * 2];
-      const right = previous[matchIdx * 2 + 1];
-      result.push({
-        match: {
-          id: -(stageIdx * 100 + matchIdx + 1),
-          stage: stageOrder[stageIdx],
-          round_name: STAGE_LABELS[stageOrder[stageIdx]],
-          home_team: left ? predictedWinner(left.match, left.prediction, championProbs) : null,
-          away_team: right ? predictedWinner(right.match, right.prediction, championProbs) : null,
-          home_score: null,
-          away_score: null,
-          is_simulated: false,
-        },
-        prediction: null,
+        match,
+        prediction: match.prediction ?? null,
         stageIdx,
         matchIdx,
-        feederIndices: [matchIdx * 2, matchIdx * 2 + 1],
+        feederIndices: stageIdx > 0 ? [matchIdx * 2, matchIdx * 2 + 1] : null,
       });
-    }
-  }
+    });
+  });
   return result;
 }
 
@@ -219,22 +133,20 @@ function MatchDetailCard({ flatMatch, svgWidth }: { flatMatch: FlatMatch; svgWid
 
 interface BracketTreeProps {
   stages: Record<string, BracketStage> | null;
-  championProbs?: Record<string, number>;
-  teams?: Team[];
   eventInfluenced?: boolean;
   onMatchClick?: (match: Match, prediction: AgentPrediction | null) => void;
 }
 
-export default function BracketTree({ stages, championProbs, teams, eventInfluenced, onMatchClick }: BracketTreeProps) {
+export default function BracketTree({ stages, eventInfluenced, onMatchClick }: BracketTreeProps) {
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const flatMatches = useMemo(
-    () => buildFlatMatches(stages, championProbs, teams),
-    [stages, championProbs, teams],
+    () => buildFlatMatches(stages),
+    [stages],
   );
   const svgW = COL_X[COL_X.length - 1] + NODE_W + 16;
   const svgH = TOTAL_H;
   const hoveredFlat = hoveredId != null ? flatMatches.find((f) => f.match.id === hoveredId) : null;
-  const hasData = !!stages || !!championProbs;
+  const hasData = !!stages;
 
   if (!hasData) {
     return (

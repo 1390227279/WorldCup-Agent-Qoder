@@ -32,7 +32,8 @@ export default function ChampionHero({ simulation, teams }: Props) {
     );
   }
 
-  const [championName, championProb] = top3[0];
+  const championName = simulation.predicted_champion ?? top3[0][0];
+  const championProb = simulation.champion_probs[championName] ?? top3[0][1];
   const champion = teams.find(
     (t) => t.name === championName || t.name_cn === championName
   );

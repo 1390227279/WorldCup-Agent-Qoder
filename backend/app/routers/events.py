@@ -7,7 +7,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -15,6 +15,10 @@ from sqlalchemy.orm import selectinload
 from app.models.database import get_db
 from app.models.event import Event
 from app.models.team import Team
+from app.models.tournament import (
+    DEFAULT_TOURNAMENT_CODE,
+    TournamentTeam,
+)
 from app.services.event_sources import FileEventSource
 from app.services.scenario_resolver import (
     ATTACK_LAMBDA_DELTA,
@@ -33,7 +37,7 @@ router = APIRouter()
 class EventCreate(BaseModel):
     team_id: int
     type: str
-    title: str
+    title: str = Field(min_length=1, max_length=200)
     description: Optional[str] = None
     severity: str = "MINOR"
     impact: Optional[dict] = None
@@ -45,7 +49,9 @@ class EventCreate(BaseModel):
     expires_at: Optional[datetime] = None
 
 class EventUpdate(BaseModel):
-    title: Optional[str] = None
+    team_id: Optional[int] = None
+    type: Optional[str] = None
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
     description: Optional[str] = None
     severity: Optional[str] = None
     impact: Optional[dict] = None
@@ -59,6 +65,37 @@ class EventUpdate(BaseModel):
 
 TYPE_LABELS = {"INJURY": "伤病", "COACHING": "教练变动", "TACTICAL": "战术调整", "MORALE": "士气", "OTHER": "其他"}
 SEVERITY_LABELS = {"CRITICAL": "严重", "MAJOR": "重要", "MINOR": "一般"}
+STATUS_LABELS = {
+    "ACTIVE": "生效中",
+    "SCHEDULED": "待生效",
+    "EXPIRED": "已过期",
+    "INACTIVE": "已停用",
+}
+
+
+def _event_status(event: Event, now: datetime | None = None) -> str:
+    current_time = now or datetime.utcnow()
+    if not event.active:
+        return "INACTIVE"
+    if event.effective_at and event.effective_at > current_time:
+        return "SCHEDULED"
+    if event.expires_at and event.expires_at <= current_time:
+        return "EXPIRED"
+    return "ACTIVE"
+
+
+def _event_load_options():
+    return selectinload(Event.team).selectinload(
+        Team.tournament_entries
+    ).selectinload(TournamentTeam.tournament)
+
+
+def _validate_event_window(
+    effective_at: datetime | None,
+    expires_at: datetime | None,
+) -> None:
+    if effective_at and expires_at and expires_at <= effective_at:
+        raise ValueError("失效时间必须晚于生效时间")
 
 def _event_to_dict(event: Event) -> dict:
     d = event.to_dict()
@@ -67,6 +104,34 @@ def _event_to_dict(event: Event) -> dict:
         d["fifa_code"] = event.team.fifa_code
     d["type_label"] = TYPE_LABELS.get(event.type, event.type)
     d["severity_label"] = SEVERITY_LABELS.get(event.severity, event.severity)
+    status = _event_status(event)
+    d["status"] = status
+    d["status_label"] = STATUS_LABELS[status]
+    legacy_fields = [
+        key for key in ("attack", "defense")
+        if key in (event.impact or {})
+    ]
+    d["legacy_impact_fields"] = legacy_fields
+    d["needs_impact_migration"] = bool(legacy_fields)
+    if event.team:
+        entries = [entry for entry in event.team.tournament_entries if entry.active]
+        entry = next(
+            (
+                item for item in entries
+                if item.tournament.code == DEFAULT_TOURNAMENT_CODE
+            ),
+            entries[0] if entries else None,
+        )
+        d["tournament"] = (
+            {
+                "id": entry.tournament.id,
+                "code": entry.tournament.code,
+                "name": entry.tournament.name,
+                "name_cn": entry.tournament.name_cn,
+                "year": entry.tournament.year,
+            }
+            if entry else None
+        )
     return d
 
 @router.get("/types")
@@ -87,7 +152,7 @@ async def list_events(
     current_only: bool = Query(False),
     db: AsyncSession = Depends(get_db),
 ):
-    stmt = select(Event).options(selectinload(Event.team))
+    stmt = select(Event).options(_event_load_options())
     now = datetime.utcnow()
     if active_only:
         stmt = stmt.where(Event.active == True)
@@ -109,8 +174,10 @@ async def create_event(req: EventCreate, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=400, detail="事件类型无效")
     if req.severity not in SEVERITY_LABELS:
         raise HTTPException(status_code=400, detail="严重程度无效")
-    if req.effective_at and req.expires_at and req.expires_at <= req.effective_at:
-        raise HTTPException(status_code=400, detail="失效时间必须晚于生效时间")
+    try:
+        _validate_event_window(req.effective_at, req.expires_at)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
         normalized_impact = normalize_impact_for_storage(req.impact)
     except EventImpactError as exc:
@@ -128,7 +195,10 @@ async def create_event(req: EventCreate, db: AsyncSession = Depends(get_db)):
     await db.refresh(event)
     get_simulation_cache().invalidate_scenarios({event.id})
     result = await db.execute(
-        select(Event).options(selectinload(Event.team)).where(Event.id == event.id)
+        select(Event)
+        .options(_event_load_options())
+        .where(Event.id == event.id)
+        .execution_options(populate_existing=True)
     )
     event = result.scalar_one()
     return _event_to_dict(event)
@@ -138,33 +208,56 @@ async def update_event(event_id: int, req: EventUpdate, db: AsyncSession = Depen
     event = await db.get(Event, event_id)
     if not event:
         raise HTTPException(status_code=404, detail="事件不存在")
+    fields_set = req.model_fields_set
+    if req.team_id is not None:
+        if not await db.get(Team, req.team_id):
+            raise HTTPException(status_code=404, detail="球队不存在")
+        event.team_id = req.team_id
+    if req.type is not None:
+        if req.type not in TYPE_LABELS:
+            raise HTTPException(status_code=400, detail="事件类型无效")
+        event.type = req.type
     if req.title is not None:
         event.title = req.title
-    if req.description is not None:
+    if "description" in fields_set:
         event.description = req.description
     if req.severity is not None:
         if req.severity not in ("CRITICAL", "MAJOR", "MINOR"):
             raise HTTPException(status_code=400, detail="严重程度无效")
         event.severity = req.severity
-    if req.impact is not None:
+    if "impact" in fields_set:
         try:
             event.impact = normalize_impact_for_storage(req.impact)
         except EventImpactError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
     if req.active is not None:
         event.active = req.active
-    for field_name in ("source", "source_type", "source_url", "external_id", "effective_at", "expires_at"):
-        value = getattr(req, field_name)
-        if value is not None:
-            setattr(event, field_name, value)
-    effective_at = req.effective_at if req.effective_at is not None else event.effective_at
-    expires_at = req.expires_at if req.expires_at is not None else event.expires_at
-    if effective_at and expires_at and expires_at <= effective_at:
-        raise HTTPException(status_code=400, detail="失效时间必须晚于生效时间")
+    effective_at = req.effective_at if "effective_at" in fields_set else event.effective_at
+    expires_at = req.expires_at if "expires_at" in fields_set else event.expires_at
+    try:
+        _validate_event_window(effective_at, expires_at)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    for field_name in (
+        "source",
+        "source_url",
+        "external_id",
+        "effective_at",
+        "expires_at",
+    ):
+        if field_name in fields_set:
+            setattr(event, field_name, getattr(req, field_name))
+    if "source_type" in fields_set:
+        if not req.source_type:
+            raise HTTPException(status_code=400, detail="来源类型不能为空")
+        event.source_type = req.source_type
     await db.commit()
     get_simulation_cache().invalidate_scenarios({event_id})
     result = await db.execute(
-        select(Event).options(selectinload(Event.team)).where(Event.id == event_id)
+        select(Event)
+        .options(_event_load_options())
+        .where(Event.id == event_id)
+        .execution_options(populate_existing=True)
     )
     event = result.scalar_one()
     return _event_to_dict(event)
@@ -270,6 +363,7 @@ async def import_events(
                 "expires_at": _parse_datetime(raw.get("expires_at")),
                 "active": active_raw not in ("false", "0", "no", "否"),
             }
+            _validate_event_window(payload["effective_at"], payload["expires_at"])
             event = by_external.get((source_type, external_id)) if external_id else None
             event = event or by_fingerprint.get((team.id, event_type, title, source or ""))
             if event:

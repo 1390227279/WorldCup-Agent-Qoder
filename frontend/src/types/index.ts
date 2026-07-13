@@ -86,6 +86,17 @@ export interface Event {
   fifa_code?: string;
   type_label?: string;
   severity_label?: string;
+  status?: "ACTIVE" | "SCHEDULED" | "EXPIRED" | "INACTIVE";
+  status_label?: string;
+  legacy_impact_fields?: string[];
+  needs_impact_migration?: boolean;
+  tournament?: {
+    id: number;
+    code: string;
+    name: string;
+    name_cn: string;
+    year: number;
+  } | null;
 }
 
 export interface EventCreate {
@@ -104,17 +115,19 @@ export interface EventCreate {
 }
 
 export interface EventUpdate {
+  team_id?: number;
+  type?: string;
   title?: string;
-  description?: string;
+  description?: string | null;
   severity?: string;
-  impact?: Record<string, number>;
+  impact?: Record<string, number> | null;
   active?: boolean;
-  source?: string;
-  source_type?: string;
-  source_url?: string;
-  external_id?: string;
-  effective_at?: string;
-  expires_at?: string;
+  source?: string | null;
+  source_type?: string | null;
+  source_url?: string | null;
+  external_id?: string | null;
+  effective_at?: string | null;
+  expires_at?: string | null;
 }
 
 export interface EventImportResult {
@@ -125,6 +138,13 @@ export interface EventImportResult {
   skipped: number;
   failed: number;
   errors: Array<{ row: number; error: string }>;
+}
+
+export interface EventMetadata {
+  types: Record<string, string>;
+  severities: Record<string, string>;
+  impact_fields: Record<string, string>;
+  impact_range: { min: number; max: number };
 }
 
 export interface BracketNode {

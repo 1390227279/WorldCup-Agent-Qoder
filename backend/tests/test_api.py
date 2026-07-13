@@ -197,6 +197,93 @@ class TestEventsEndpoint:
         current = await client.get("/api/v1/events?active_only=true&current_only=true")
         assert event_id not in {event["id"] for event in current.json()}
 
+    async def test_event_list_exposes_status_tournament_and_legacy_warning(self, client):
+        events = (await client.get("/api/v1/events")).json()
+        legacy = next(event for event in events if "attack" in (event["impact"] or {}))
+        assert legacy["status"] == "ACTIVE"
+        assert legacy["status_label"] == "生效中"
+        assert legacy["tournament"]["code"] == "world-cup-2026"
+        assert legacy["needs_impact_migration"] is True
+        assert legacy["legacy_impact_fields"] == ["attack"]
+
+    async def test_event_api_validates_standard_modifiers_and_time_window(self, client):
+        teams = (await client.get("/api/v1/teams")).json()
+        team_id = teams[0]["id"]
+        created = await client.post("/api/v1/events", json={
+            "team_id": team_id,
+            "type": "TACTICAL",
+            "title": "标准修正字段测试",
+            "impact": {
+                "attack_lambda_delta": -0.1,
+                "concede_lambda_delta": 0.2,
+            },
+            "effective_at": "2026-06-01T00:00:00",
+            "expires_at": "2026-07-31T23:59:59",
+        })
+        assert created.status_code == 200
+        assert created.json()["impact"] == {
+            "attack_lambda_delta": -0.1,
+            "concede_lambda_delta": 0.2,
+        }
+        assert created.json()["needs_impact_migration"] is False
+
+        updated = await client.put(
+            f'/api/v1/events/{created.json()["id"]}',
+            json={
+                "team_id": teams[1]["id"],
+                "type": "OTHER",
+                "description": None,
+                "effective_at": None,
+                "expires_at": None,
+                "impact": {"attack": -0.05, "defense": 0.1},
+            },
+        )
+        assert updated.status_code == 200
+        assert updated.json()["team_id"] == teams[1]["id"]
+        assert updated.json()["type"] == "OTHER"
+        assert updated.json()["effective_at"] is None
+        assert updated.json()["impact"] == {
+            "attack_lambda_delta": -0.05,
+            "concede_lambda_delta": 0.1,
+        }
+        assert updated.json()["needs_impact_migration"] is False
+
+        extreme = await client.post("/api/v1/events", json={
+            "team_id": team_id,
+            "type": "TACTICAL",
+            "title": "极端修正",
+            "impact": {"attack_lambda_delta": -0.51},
+        })
+        assert extreme.status_code == 400
+
+        invalid_window = await client.post("/api/v1/events", json={
+            "team_id": team_id,
+            "type": "TACTICAL",
+            "title": "错误时间范围",
+            "effective_at": "2026-08-01T00:00:00",
+            "expires_at": "2026-07-01T00:00:00",
+        })
+        assert invalid_window.status_code == 400
+        assert invalid_window.json()["detail"] == "失效时间必须晚于生效时间"
+
+    async def test_expired_event_is_ignored_by_scenario_simulation(self, client):
+        teams = (await client.get("/api/v1/teams")).json()
+        event = await client.post("/api/v1/events", json={
+            "team_id": teams[0]["id"],
+            "type": "INJURY",
+            "title": "过期情景事件",
+            "impact": {"attack_lambda_delta": -0.5},
+            "expires_at": "2020-01-01T00:00:00",
+        })
+        simulation = await client.get(
+            f'/api/v1/bracket/simulation?iterations=100&event_ids={event.json()["id"]}'
+        )
+        assert simulation.status_code == 200
+        assert simulation.json()["scenario"]["ignored_events"] == [{
+            "event_id": event.json()["id"],
+            "reason": "expired",
+        }]
+
 
 class TestPredictionsEndpoint:
     async def test_predict_match_returns_result(self, client):

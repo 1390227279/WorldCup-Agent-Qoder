@@ -102,7 +102,7 @@ export const api = {
     putJSON<import("../types").Event>(`/events/${id}`, data),
   deleteEvent: (id: number) =>
     deleteJSON<{ deleted: boolean }>(`/events/${id}`),
-  getEventTypes: () => fetchJSON<{ types: Record<string,string>; severities: Record<string,string> }>("/events/types"),
+  getEventTypes: () => fetchJSON<import("../types").EventMetadata>("/events/types"),
   importEvents: async (file: File) => {
     const form = new FormData();
     form.append("file", file);

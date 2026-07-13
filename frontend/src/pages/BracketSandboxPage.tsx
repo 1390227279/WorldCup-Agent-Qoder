@@ -94,25 +94,25 @@ export default function BracketSandboxPage() {
   })();
 
   return (
-    <div className="max-w-[1400px] mx-auto px-4 py-8">
+    <div className="max-w-[1600px] mx-auto px-4 py-4">
       <Link
         to="/"
-        className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors mb-6 inline-block"
+        className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors mb-3 inline-block"
       >
         ← 返回首页
       </Link>
 
-      <header className="mb-6">
-        <h1 className="text-3xl font-bold mb-2">🏟️ Bracket Sandbox</h1>
+      <header className="mb-3">
+        <h1 className="text-2xl font-bold mb-1">🏟️ 淘汰赛推演</h1>
         <p className="text-[var(--color-text-muted)]">
-          交互式淘汰赛推演沙盘 · 五层对阵树 · AI Agent 预测可视化
+          交互式淘汰赛推演 · 五层对阵树 · 智能预测分析
         </p>
       </header>
 
       <ScenarioSlider selectedEventIds={selectedEventIds} onChange={setSelectedEventIds} />
 
-      <div className="flex gap-6 items-start flex-col xl:flex-row">
-        <div className="flex-1 min-w-0 bg-[var(--color-surface)] rounded-xl p-6 overflow-hidden relative">
+      <div className="flex gap-4 items-start flex-col xl:flex-row">
+        <div className="flex-1 min-w-0 bg-[var(--color-surface)] rounded-xl p-3 overflow-hidden relative">
           {isLoading && (
             <div className="flex items-center justify-center py-24">
               <div className="text-center">
@@ -187,9 +187,9 @@ export default function BracketSandboxPage() {
                     </button>
                   </div>
                   <div className="flex items-center justify-between text-sm font-medium">
-                    <span>{selectedMatch.home_team?.name_cn ?? selectedMatch.home_team?.name ?? "TBD"}</span>
-                    <span className="text-[var(--color-text-muted)] mx-2">vs</span>
-                    <span>{selectedMatch.away_team?.name_cn ?? selectedMatch.away_team?.name ?? "TBD"}</span>
+                    <span>{selectedMatch.home_team?.name_cn ?? "待定"}</span>
+                    <span className="text-[var(--color-text-muted)] mx-2">对阵</span>
+                    <span>{selectedMatch.away_team?.name_cn ?? "待定"}</span>
                   </div>
                   {selectedMatch.home_score != null && (
                     <div className="text-center text-lg font-bold mt-1 font-mono">
@@ -205,7 +205,7 @@ export default function BracketSandboxPage() {
                       transition={{ repeat: Infinity, duration: 1.5 }}
                       className="text-sm text-[var(--color-text-muted)]"
                     >
-                      🤖 Agent 正在分析…
+                      🤖 正在分析比赛…
                     </motion.div>
                   </div>
                 )}
@@ -219,7 +219,13 @@ export default function BracketSandboxPage() {
                   </div>
                 )}
 
-                {!isPending && <AIPunditPanel prediction={effectivePrediction} />}
+                {!isPending && (
+                  <AIPunditPanel
+                    prediction={effectivePrediction}
+                    homeTeam={selectedMatch.home_team}
+                    awayTeam={selectedMatch.away_team}
+                  />
+                )}
               </motion.div>
             ) : (
               <motion.div

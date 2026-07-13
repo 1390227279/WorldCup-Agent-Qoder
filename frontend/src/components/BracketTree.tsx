@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import type {
   Match,
   AgentPrediction,
@@ -18,10 +17,12 @@ const STAGE_LABELS: Record<string, string> = {
   FINAL: "决赛",
 };
 
-const NODE_W = 210;
-const NODE_H = 56;
-const COL_GAP = 64;
-const MIN_GAP_Y = 14;
+const NODE_W = 176;
+const NODE_H = 38;
+const COL_GAP = 42;
+const MIN_GAP_Y = 2;
+const HEADER_H = 34;
+const FOOTER_H = 28;
 const COL_X = STAGES.map((_, i) => i * (NODE_W + COL_GAP));
 
 function flagEmoji(code: string | undefined | null): string {
@@ -38,14 +39,14 @@ function stride(stageIdx: number): number {
   return (NODE_H + MIN_GAP_Y) * Math.pow(2, stageIdx);
 }
 
-const TOTAL_H = stride(0) * 16;
+const TOTAL_H = HEADER_H + stride(0) * 16 + FOOTER_H;
 
 function yCenter(stageIdx: number, matchIdx: number): number {
   const s = stride(stageIdx);
-  return s * matchIdx + s / 2;
+  return HEADER_H + s * matchIdx + s / 2;
 }
 
-export function matchCount(stageIdx: number): number {
+function matchCount(stageIdx: number): number {
   return 16 >> stageIdx;
 }
 
@@ -165,6 +166,13 @@ function buildFlatMatches(
 
 function MatchDetailCard({ flatMatch, svgWidth }: { flatMatch: FlatMatch; svgWidth: number }) {
   const { match, prediction } = flatMatch;
+  const winnerName = prediction?.winner?.toLowerCase() === "draw"
+    ? "平局"
+    : prediction?.winner === match.home_team?.name
+      ? match.home_team?.name_cn
+      : prediction?.winner === match.away_team?.name
+        ? match.away_team?.name_cn
+        : prediction?.winner;
   const x = COL_X[flatMatch.stageIdx];
   const y = yCenter(flatMatch.stageIdx, flatMatch.matchIdx);
   const popLeft = x + NODE_W + 12 > svgWidth - 260 ? x - 260 : x + NODE_W + 12;
@@ -185,15 +193,15 @@ function MatchDetailCard({ flatMatch, svgWidth }: { flatMatch: FlatMatch; svgWid
           <>
             <div style={{ borderTop: "1px solid #333", paddingTop: 8, marginBottom: 6 }}>
               <span style={{ color: prediction.is_agent ? "var(--color-gold)" : "var(--color-text-muted)" }}>
-                {prediction.is_agent ? "🤖 Agent 预测" : "📊 泊松降级"}
+                {prediction.is_agent ? "🤖 智能预测" : "📊 统计预测"}
               </span>
               <span style={{ float: "right", fontWeight: 600 }}>{((prediction.confidence ?? 0.5) * 100).toFixed(0)}%</span>
             </div>
             <div style={{ color: "var(--color-text-muted)", fontSize: 11, marginBottom: 4 }}>
-              胜者: <strong style={{ color: "var(--color-text)" }}>{prediction.winner ?? "-"}</strong>
+              获胜方：<strong style={{ color: "var(--color-text)" }}>{winnerName ?? "-"}</strong>
             </div>
             <div style={{ color: "var(--color-text-muted)", fontSize: 11, marginBottom: 4 }}>
-              模型: <code style={{ color: "var(--color-accent)" }}>{prediction.model_used}</code>
+              预测方式：{prediction.is_agent ? "智能综合分析" : "统计模型分析"}
             </div>
             {prediction.key_factors && (
               <div style={{ marginTop: 6 }}>
@@ -240,18 +248,35 @@ export default function BracketTree({ stages, championProbs, teams, eventInfluen
   }
 
   return (
-    <TransformWrapper initialScale={1} minScale={0.3} maxScale={2.5} centerOnInit wheel={{ step: 0.1 }}>
-      <TransformComponent wrapperStyle={{ width: "100%", height: "calc(100vh - 280px)" }}>
-        <div style={{ position: "relative" }}>
-          <div style={{ display: "flex", minWidth: svgW, paddingLeft: 8, marginBottom: 8, position: "relative", height: 24 }}>
-            {STAGES.map((s, i) => (
-              <div key={s} style={{ position: "absolute", left: COL_X[i] + 8, width: NODE_W, textAlign: "center", fontSize: 13, fontWeight: 700, color: "var(--color-text-muted)", letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                {STAGE_LABELS[s]}
-              </div>
-            ))}
-          </div>
-          <div style={{ position: "relative", marginTop: 32 }}>
-            <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} style={{ display: "block" }}>
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        height: "clamp(520px, calc(100vh - 300px), 700px)",
+        minHeight: 0,
+      }}
+    >
+      <svg
+        width="100%"
+        height="100%"
+        viewBox={`0 0 ${svgW} ${svgH}`}
+        preserveAspectRatio="xMidYMid meet"
+        style={{ display: "block", overflow: "visible" }}
+      >
+              {STAGES.map((stage, index) => (
+                <text
+                  key={stage}
+                  x={COL_X[index] + NODE_W / 2}
+                  y={18}
+                  textAnchor="middle"
+                  fill="var(--color-text-muted)"
+                  fontSize={12}
+                  fontWeight={700}
+                  letterSpacing="0.05em"
+                >
+                  {STAGE_LABELS[stage]}
+                </text>
+              ))}
               {flatMatches.map((fm) => {
                 if (fm.stageIdx === 0 || !fm.feederIndices) return null;
                 const prevStage = fm.stageIdx - 1;
@@ -280,15 +305,15 @@ export default function BracketTree({ stages, championProbs, teams, eventInfluen
                 return (
                   <motion.g key={match.id} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay, duration: 0.4, ease: "easeOut" }} onMouseEnter={() => setHoveredId(match.id)} onMouseLeave={() => setHoveredId(null)} onClick={() => onMatchClick?.(match, prediction)} style={{ cursor: "pointer" }}>
                     <rect x={x} y={y} width={NODE_W} height={NODE_H} rx={6} fill={isHovered ? "#1e1e3a" : "var(--color-surface)"} stroke={strokeColor} strokeWidth={isHovered ? 2 : isFinal ? 2 : 1} strokeDasharray={isAgent ? undefined : "5 3"} style={{ transition: "fill 0.15s, stroke-width 0.15s" }} />
-                    <text x={x + 10} y={y + 19} fill="var(--color-text)" fontSize={11} fontFamily="Inter, system-ui, sans-serif">
-                      {match.home_team ? `${flagEmoji(match.home_team.fifa_code)} ${match.home_team.name_cn || match.home_team.name}` : "TBD"}
+                    <text x={x + 8} y={y + 13} fill="var(--color-text)" fontSize={9.5} fontFamily="Inter, system-ui, sans-serif">
+                      {match.home_team ? `${flagEmoji(match.home_team.fifa_code)} ${match.home_team.name_cn || match.home_team.name}` : "待定"}
                     </text>
-                    <text x={x + NODE_W - 12} y={y + 19} fill="var(--color-text)" fontSize={12} fontWeight="bold" textAnchor="end" fontFamily="Inter, system-ui, sans-serif">{match.home_score ?? "-"}</text>
+                    <text x={x + NODE_W - 8} y={y + 13} fill="var(--color-text)" fontSize={10} fontWeight="bold" textAnchor="end" fontFamily="Inter, system-ui, sans-serif">{match.home_score ?? "-"}</text>
                     <line x1={x + 8} y1={y + NODE_H / 2} x2={x + NODE_W - 8} y2={y + NODE_H / 2} stroke="var(--color-text-muted)" strokeOpacity={0.15} />
-                    <text x={x + 10} y={y + 44} fill="var(--color-text)" fontSize={11} fontFamily="Inter, system-ui, sans-serif">
-                      {match.away_team ? `${flagEmoji(match.away_team.fifa_code)} ${match.away_team.name_cn || match.away_team.name}` : "TBD"}
+                    <text x={x + 8} y={y + 31} fill="var(--color-text)" fontSize={9.5} fontFamily="Inter, system-ui, sans-serif">
+                      {match.away_team ? `${flagEmoji(match.away_team.fifa_code)} ${match.away_team.name_cn || match.away_team.name}` : "待定"}
                     </text>
-                    <text x={x + NODE_W - 12} y={y + 44} fill="var(--color-text)" fontSize={12} fontWeight="bold" textAnchor="end" fontFamily="Inter, system-ui, sans-serif">{match.away_score ?? "-"}</text>
+                    <text x={x + NODE_W - 8} y={y + 31} fill="var(--color-text)" fontSize={10} fontWeight="bold" textAnchor="end" fontFamily="Inter, system-ui, sans-serif">{match.away_score ?? "-"}</text>
                     {prediction?.confidence != null && (
                       <g>
                         <rect x={x + NODE_W - 40} y={y + NODE_H / 2 - 7} width={30} height={14} rx={7} fill={isAgent ? "var(--color-gold)" : "var(--color-text-muted)"} fillOpacity={0.18} />
@@ -306,24 +331,23 @@ export default function BracketTree({ stages, championProbs, teams, eventInfluen
                 )}
               </AnimatePresence>
               <motion.text x={COL_X[STAGES.length - 1] + NODE_W / 2} y={yCenter(STAGES.length - 1, 0) - NODE_H / 2 - 20} textAnchor="middle" fontSize={28} initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 1.2, type: "spring", stiffness: 200 }}>🏆</motion.text>
-            </svg>
-          </div>
-          <div style={{ display: "flex", gap: 24, marginTop: 16, paddingLeft: 8, fontSize: 12, color: "var(--color-text-muted)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <svg width={28} height={12}><rect x={0} y={0} width={28} height={12} rx={3} fill="var(--color-surface)" stroke="var(--color-primary)" strokeWidth={1} /></svg>
-              <span>Agent 预测（实线）</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <svg width={28} height={12}><rect x={0} y={0} width={28} height={12} rx={3} fill="var(--color-surface)" stroke="var(--color-text-muted)" strokeWidth={1} strokeDasharray="4 2" /></svg>
-              <span>泊松降级（虚线）</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <svg width={28} height={12}><rect x={0} y={0} width={28} height={12} rx={3} fill="var(--color-surface)" stroke="var(--color-gold)" strokeWidth={2} /></svg>
-              <span>决赛</span>
-            </div>
-          </div>
-        </div>
-      </TransformComponent>
-    </TransformWrapper>
+      </svg>
+      <div
+        style={{
+          position: "absolute",
+          left: 8,
+          bottom: 0,
+          display: "flex",
+          gap: 16,
+          fontSize: 10,
+          color: "var(--color-text-muted)",
+          pointerEvents: "none",
+        }}
+      >
+        <span>蓝色：智能预测</span>
+        <span>虚线：统计预测</span>
+        <span style={{ color: "var(--color-gold)" }}>金色：决赛</span>
+      </div>
+    </div>
   );
 }

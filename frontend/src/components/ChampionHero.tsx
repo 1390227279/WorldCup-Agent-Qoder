@@ -12,10 +12,10 @@ export default function ChampionHero({ simulation, teams }: Props) {
       <div className="bg-[var(--color-surface)] rounded-2xl p-12 text-center">
         <p className="text-4xl mb-4">🤖</p>
         <p className="text-xl text-[var(--color-text-muted)]">
-          AI Agent 正在分析数据，生成冠军预测...
+          正在分析数据，生成冠军预测...
         </p>
         <p className="text-sm text-[var(--color-text-muted)] mt-2">
-          启动后端服务后，此区域将展示 Agent 推演的冠军结果
+          数据准备完成后，此区域将展示冠军推演结果
         </p>
       </div>
     );
@@ -55,7 +55,7 @@ export default function ChampionHero({ simulation, teams }: Props) {
 
       <div className="relative z-10">
         <p className="text-sm text-[var(--color-text-muted)] uppercase tracking-widest mb-4">
-          Agent 推演 · 蒙特卡洛 {simulation.iterations?.toLocaleString() ?? "10,000"} 次模拟
+          智能推演 · 蒙特卡洛 {simulation.iterations?.toLocaleString() ?? "10,000"} 次模拟
         </p>
 
         {champion && (
@@ -68,9 +68,6 @@ export default function ChampionHero({ simulation, teams }: Props) {
             <h2 className="text-5xl font-bold text-[var(--color-gold)] mb-2">
               {champion.name_cn}
             </h2>
-            <p className="text-lg text-[var(--color-text-muted)] mb-4">
-              {champion.name}
-            </p>
             <div className="inline-flex items-center gap-2 bg-[var(--color-gold)]/10 rounded-full px-6 py-2">
               <span className="text-3xl font-bold text-[var(--color-gold)]">
                 {(championProb * 100).toFixed(1)}%

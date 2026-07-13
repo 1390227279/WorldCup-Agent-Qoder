@@ -8,7 +8,7 @@ async function throwAPIError(res: Response): Promise<never> {
   } catch {
     // The server may return an empty or non-JSON error response.
   }
-  throw new Error(detail || `API error: ${res.status}`);
+  throw new Error(detail || `请求失败，状态码：${res.status}`);
 }
 
 async function fetchJSON<T>(url: string): Promise<T> {

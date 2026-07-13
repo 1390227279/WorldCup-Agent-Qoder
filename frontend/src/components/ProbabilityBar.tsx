@@ -11,7 +11,7 @@ export default function ProbabilityBar({ simulation, teams }: Props) {
     return (
       <div className="bg-[var(--color-surface)] rounded-xl p-8 text-center">
         <p className="text-[var(--color-text-muted)]">
-          等待 Agent 完成蒙特卡洛模拟...
+          正在完成蒙特卡洛模拟...
         </p>
       </div>
     );

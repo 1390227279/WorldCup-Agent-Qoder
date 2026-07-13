@@ -45,7 +45,7 @@ export default function AdminEventsPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold mb-2">事件管理</h1>
-          <p className="text-[var(--color-text-muted)] text-sm">伤病、教练变动、战术调整等动态事件，Agent 会实时感知并调整预测权重</p>
+          <p className="text-[var(--color-text-muted)] text-sm">伤病、教练变动、战术调整等动态事件会实时影响预测权重</p>
         </div>
         <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm hover:opacity-90 transition-opacity">
           {showForm ? "取消" : "+ 新建事件"}
@@ -61,7 +61,7 @@ export default function AdminEventsPage() {
               <label className="block text-xs text-[var(--color-text-muted)] mb-1">球队</label>
               <select value={form.team_id} onChange={e => setForm({ ...form, team_id: Number(e.target.value) })} className="w-full bg-[var(--color-bg)] rounded-lg px-3 py-2 text-sm border border-[var(--color-text-muted)]/20">
                 <option value={0}>选择球队...</option>
-                {Array.isArray(teams) && teams.map((t: Team) => <option key={t.id} value={t.id}>{t.name_cn} ({t.name})</option>)}
+                {Array.isArray(teams) && teams.map((t: Team) => <option key={t.id} value={t.id}>{t.name_cn}</option>)}
               </select>
             </div>
             <div>

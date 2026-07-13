@@ -68,9 +68,9 @@ async def predict_match(
     away = await _resolve_team(db, req.away_team_id, req.away_team_code)
 
     if not home:
-        raise HTTPException(status_code=404, detail=f"Home team ID={req.home_team_id} not found")
+        raise HTTPException(status_code=404, detail=f"未找到主队，球队编号：{req.home_team_id}")
     if not away:
-        raise HTTPException(status_code=404, detail=f"Away team ID={req.away_team_id} not found")
+        raise HTTPException(status_code=404, detail=f"未找到客队，球队编号：{req.away_team_id}")
 
     result = await _get_prediction_service().predict_match(
         home_team=home.name,

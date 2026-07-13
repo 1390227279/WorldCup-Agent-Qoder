@@ -42,7 +42,6 @@ export default function TeamPage() {
 
       <div className="bg-[var(--color-surface)] rounded-xl p-8 mb-8">
         <h1 className="text-3xl font-bold mb-2">{team.name_cn}</h1>
-        <p className="text-[var(--color-text-muted)] mb-4">{team.name}</p>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Stat label="FIFA 排名" value={team.fifa_ranking?.toString() ?? "-"} />
@@ -59,10 +58,9 @@ export default function TeamPage() {
 
         <div className="mt-4 text-[var(--color-text-muted)] text-sm">
           <p>
-            小组: {team.group_name} · 分档: Pot {team.pot} ·{" "}
-            {team.confederation}
+            小组：{team.group_name} · 第 {team.pot} 档
           </p>
-          <p>历史最佳: {team.stats?.best_result ?? "-"}</p>
+          <p>历史最佳成绩：{team.stats?.world_cup_titles ? `${team.stats.world_cup_titles} 次夺冠` : "尚未夺冠"}</p>
         </div>
       </div>
 
@@ -97,7 +95,7 @@ export default function TeamPage() {
                             : "rgba(59,130,246,0.2)",
                     }}
                   >
-                    {event.severity}
+                    {event.severity === "CRITICAL" ? "严重" : event.severity === "MAJOR" ? "重要" : "一般"}
                   </span>
                 </div>
                 {event.description && (
@@ -120,7 +118,7 @@ export default function TeamPage() {
       <div className="bg-[var(--color-surface)] rounded-xl p-6">
         <h2 className="text-xl font-semibold mb-2">🏁 预测晋级路径</h2>
         <p className="text-[var(--color-text-muted)]">
-          Agent 推演完成后将在此展示完整晋级路径
+          智能推演完成后将在此展示完整晋级路径
         </p>
       </div>
     </div>

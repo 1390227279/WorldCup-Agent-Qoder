@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import type { AgentPrediction } from "../types";
+import type { AgentPrediction, Team } from "../types";
 
 /* ================================================================
    Helpers
@@ -38,9 +38,9 @@ function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <span className="text-4xl mb-3 opacity-40">🤖</span>
-      <p className="text-[var(--color-text-muted)] text-sm">暂无 AI 分析数据</p>
+      <p className="text-[var(--color-text-muted)] text-sm">暂无智能分析数据</p>
       <p className="text-[var(--color-text-muted)] text-xs mt-1 opacity-60">
-        选择一场比赛后，Agent 将生成完整推理报告
+        选择一场比赛后，将生成完整分析报告
       </p>
     </div>
   );
@@ -60,13 +60,13 @@ function DegradationBanner() {
       }}
     >
       <span className="text-base">⚠️</span>
-      <span>Qwen Agent 不可用，当前使用泊松统计模型（降级预测）</span>
+      <span>智能分析暂时不可用，当前使用统计模型完成预测</span>
     </motion.div>
   );
 }
 
 /* ── Model badge ── */
-function ModelBadge({ isAgent, model }: { isAgent: boolean; model: string | null }) {
+function ModelBadge({ isAgent }: { isAgent: boolean }) {
   return (
     <div
       className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-mono"
@@ -77,13 +77,33 @@ function ModelBadge({ isAgent, model }: { isAgent: boolean; model: string | null
       }}
     >
       <span>{isAgent ? "🤖" : "📊"}</span>
-      {isAgent ? `${model ?? "Qwen Max"} Agent 决策` : "泊松统计模型（降级）"}
+      {isAgent ? "智能综合预测" : "统计模型预测"}
     </div>
   );
 }
 
 /* ── Prediction summary card ── */
-function PredictionSummary({ prediction }: { prediction: AgentPrediction }) {
+function displayWinner(
+  winner: string | null,
+  homeTeam?: Team | null,
+  awayTeam?: Team | null,
+): string {
+  if (!winner) return "—";
+  if (winner.toLowerCase() === "draw") return "平局";
+  if (winner === homeTeam?.name || winner === homeTeam?.name_cn) return homeTeam.name_cn;
+  if (winner === awayTeam?.name || winner === awayTeam?.name_cn) return awayTeam.name_cn;
+  return winner;
+}
+
+function PredictionSummary({
+  prediction,
+  homeTeam,
+  awayTeam,
+}: {
+  prediction: AgentPrediction;
+  homeTeam?: Team | null;
+  awayTeam?: Team | null;
+}) {
   const conf = prediction.confidence ?? 0.5;
 
   return (
@@ -101,7 +121,7 @@ function PredictionSummary({ prediction }: { prediction: AgentPrediction }) {
         <span className="text-xs text-[var(--color-text-muted)] uppercase tracking-wider">
           预测结果
         </span>
-        <ModelBadge isAgent={prediction.is_agent} model={prediction.model_used} />
+        <ModelBadge isAgent={prediction.is_agent} />
       </div>
 
       {/* Winner */}
@@ -109,7 +129,7 @@ function PredictionSummary({ prediction }: { prediction: AgentPrediction }) {
         <div>
           <p className="text-xs text-[var(--color-text-muted)] mb-0.5">获胜方</p>
           <p className="text-2xl font-bold text-[var(--color-text)]">
-            {prediction.winner ?? "—"}
+            {displayWinner(prediction.winner, homeTeam, awayTeam)}
           </p>
         </div>
         <div>
@@ -222,19 +242,8 @@ function ReasoningChainView({
             {/* Step header */}
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs font-bold text-[var(--color-primary)]">
-                Step {step.step ?? i + 1}
+                步骤 {step.step ?? i + 1}
               </span>
-              {step.tool && (
-                <span
-                  className="text-[10px] font-mono px-1.5 py-0.5 rounded"
-                  style={{
-                    background: "rgba(26,86,219,0.12)",
-                    color: "var(--color-primary)",
-                  }}
-                >
-                  {step.tool}
-                </span>
-              )}
             </div>
 
             {/* Finding */}
@@ -264,50 +273,17 @@ function ReasoningChainView({
   );
 }
 
-/* ── Tool calls log ── */
-function ToolCallsLog({
-  calls,
-}: {
-  calls: AgentPrediction["tool_calls_log"];
-}) {
-  if (!calls || calls.length === 0) return null;
-
-  return (
-    <div className="space-y-1.5">
-      {calls.map((tc, i) => (
-        <motion.div
-          key={i}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.1 + i * 0.04 }}
-          className="flex items-center gap-2 text-xs font-mono rounded-md px-2.5 py-1.5"
-          style={{ background: "var(--color-bg)" }}
-        >
-          <span
-            className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-            style={{
-              background: tc.success ? "#4ade80" : "var(--color-accent)",
-            }}
-          />
-          <span className="text-[var(--color-text)]">{tc.tool_name}</span>
-          <span className="text-[var(--color-text-muted)] ml-auto">
-            {tc.execution_time_ms}ms
-          </span>
-        </motion.div>
-      ))}
-    </div>
-  );
-}
-
 /* ================================================================
    Main Component
    ================================================================ */
 
 interface Props {
   prediction: AgentPrediction | null;
+  homeTeam?: Team | null;
+  awayTeam?: Team | null;
 }
 
-export default function AIPunditPanel({ prediction }: Props) {
+export default function AIPunditPanel({ prediction, homeTeam, awayTeam }: Props) {
   if (!prediction) {
     return (
       <div className="bg-[var(--color-surface)] rounded-xl p-4">
@@ -331,7 +307,7 @@ export default function AIPunditPanel({ prediction }: Props) {
       <div className="flex items-center gap-2 mb-4">
         <span className="text-lg">🧠</span>
         <h3 className="text-sm font-bold text-[var(--color-text)]">
-          AI 评论员分析
+          智能赛事分析
         </h3>
       </div>
 
@@ -339,7 +315,7 @@ export default function AIPunditPanel({ prediction }: Props) {
       {!prediction.is_agent && <DegradationBanner />}
 
       {/* Prediction summary */}
-      <PredictionSummary prediction={prediction} />
+      <PredictionSummary prediction={prediction} homeTeam={homeTeam} awayTeam={awayTeam} />
 
       {/* Key factors */}
       {prediction.key_factors && prediction.key_factors.length > 0 && (
@@ -357,13 +333,6 @@ export default function AIPunditPanel({ prediction }: Props) {
         </>
       )}
 
-      {/* Tool calls log */}
-      {prediction.tool_calls_log && prediction.tool_calls_log.length > 0 && (
-        <>
-          <SectionTitle>工具调用记录</SectionTitle>
-          <ToolCallsLog calls={prediction.tool_calls_log} />
-        </>
-      )}
     </motion.div>
   );
 }

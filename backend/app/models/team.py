@@ -28,6 +28,12 @@ class Team(Base):
     away_matches = relationship(
         "Match", foreign_keys="Match.away_team_id", back_populates="away_team", lazy="selectin"
     )
+    tournament_entries = relationship(
+        "TournamentTeam",
+        back_populates="team",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
 
     def to_dict(self):
         return {

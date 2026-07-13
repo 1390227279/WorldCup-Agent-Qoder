@@ -5,6 +5,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.team import Team
 from app.models.event import Event
+from app.models.tournament import (
+    DEFAULT_TOURNAMENT_CODE,
+    DEFAULT_TOURNAMENT_DATA_VERSION,
+    DEFAULT_TOURNAMENT_NAME,
+    DEFAULT_TOURNAMENT_NAME_CN,
+    DEFAULT_TOURNAMENT_RULES_VERSION,
+    DEFAULT_TOURNAMENT_STATUS,
+    Tournament,
+    TournamentTeam,
+)
 
 TEAMS_SEED = [
     # ── Group A ──
@@ -240,6 +250,23 @@ async def seed_all(session: AsyncSession):
     if result.scalars().first():
         return  # already seeded
 
+    tournament_result = await session.execute(
+        select(Tournament).where(Tournament.code == DEFAULT_TOURNAMENT_CODE)
+    )
+    tournament = tournament_result.scalar_one_or_none()
+    if tournament is None:
+        tournament = Tournament(
+            code=DEFAULT_TOURNAMENT_CODE,
+            name=DEFAULT_TOURNAMENT_NAME,
+            name_cn=DEFAULT_TOURNAMENT_NAME_CN,
+            year=2026,
+            status=DEFAULT_TOURNAMENT_STATUS,
+            data_version=DEFAULT_TOURNAMENT_DATA_VERSION,
+            rules_version=DEFAULT_TOURNAMENT_RULES_VERSION,
+        )
+        session.add(tournament)
+        await session.flush()
+
     team_map: dict[str, Team] = {}
     for data in TEAMS_SEED:
         team = Team(**data)
@@ -247,6 +274,17 @@ async def seed_all(session: AsyncSession):
         team_map[data["fifa_code"]] = team
 
     await session.flush()
+
+    for data in TEAMS_SEED:
+        team = team_map[data["fifa_code"]]
+        session.add(TournamentTeam(
+            tournament_id=tournament.id,
+            team_id=team.id,
+            group_name=data.get("group_name"),
+            pot=data.get("pot"),
+            qualification_status="LEGACY",
+            active=True,
+        ))
 
     for data in EVENTS_SEED:
         code = data["fifa_code"]

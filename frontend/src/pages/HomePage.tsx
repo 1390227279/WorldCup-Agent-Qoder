@@ -12,8 +12,9 @@ export default function HomePage() {
   });
 
   const { data: simulation } = useQuery<SimulationResult>({
-    queryKey: ["simulation"],
+    queryKey: ["simulation", ""],
     queryFn: api.getSimulation as () => Promise<SimulationResult>,
+    staleTime: 5 * 60 * 1000,
   });
 
   return (
@@ -39,7 +40,7 @@ export default function HomePage() {
       </section>
 
       {/* Quick Navigation */}
-      <section className="grid grid-cols-1 gap-6">
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Link
           to="/bracket"
           className="bg-[var(--color-surface)] rounded-xl p-6 hover:ring-2 hover:ring-[var(--color-primary)] transition-all"
@@ -47,6 +48,15 @@ export default function HomePage() {
           <h3 className="text-xl font-semibold mb-2">🏟️ 淘汰赛推演</h3>
           <p className="text-[var(--color-text-muted)]">
             交互式淘汰赛推演 · 情景切换 · 实时重算
+          </p>
+        </Link>
+        <Link
+          to="/admin/events"
+          className="bg-[var(--color-surface)] rounded-xl p-6 hover:ring-2 hover:ring-[var(--color-accent)] transition-all"
+        >
+          <h3 className="text-xl font-semibold mb-2">📋 赛事事件管理</h3>
+          <p className="text-[var(--color-text-muted)]">
+            维护伤病、教练和战术事件 · 调整情景模拟
           </p>
         </Link>
       </section>

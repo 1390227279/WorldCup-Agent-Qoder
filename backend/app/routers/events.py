@@ -1,17 +1,22 @@
 """Event API routes — manage dynamic team events."""
 
 import logging
+import json
+from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.database import get_db
 from app.models.event import Event
 from app.models.team import Team
+from app.services.monte_carlo import get_engine
+from app.services.event_sources import FileEventSource
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +30,11 @@ class EventCreate(BaseModel):
     severity: str = "MINOR"
     impact: Optional[dict] = None
     source: Optional[str] = None
+    source_type: str = "MANUAL"
+    source_url: Optional[str] = None
+    external_id: Optional[str] = None
+    effective_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
 
 class EventUpdate(BaseModel):
     title: Optional[str] = None
@@ -32,6 +42,12 @@ class EventUpdate(BaseModel):
     severity: Optional[str] = None
     impact: Optional[dict] = None
     active: Optional[bool] = None
+    source: Optional[str] = None
+    source_type: Optional[str] = None
+    source_url: Optional[str] = None
+    external_id: Optional[str] = None
+    effective_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
 
 TYPE_LABELS = {"INJURY": "伤病", "COACHING": "教练变动", "TACTICAL": "战术调整", "MORALE": "士气", "OTHER": "其他"}
 SEVERITY_LABELS = {"CRITICAL": "严重", "MAJOR": "重要", "MINOR": "一般"}
@@ -50,10 +66,21 @@ async def get_event_types():
     return {"types": TYPE_LABELS, "severities": SEVERITY_LABELS}
 
 @router.get("")
-async def list_events(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Event).options(selectinload(Event.team)).order_by(Event.created_at.desc())
-    )
+async def list_events(
+    active_only: bool = Query(False),
+    current_only: bool = Query(False),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = select(Event).options(selectinload(Event.team))
+    now = datetime.utcnow()
+    if active_only:
+        stmt = stmt.where(Event.active == True)
+    if current_only:
+        stmt = stmt.where(
+            or_(Event.effective_at.is_(None), Event.effective_at <= now),
+            or_(Event.expires_at.is_(None), Event.expires_at > now),
+        )
+    result = await db.execute(stmt.order_by(Event.created_at.desc()))
     events = result.scalars().all()
     return [_event_to_dict(e) for e in events]
 
@@ -62,13 +89,21 @@ async def create_event(req: EventCreate, db: AsyncSession = Depends(get_db)):
     team = await db.get(Team, req.team_id)
     if not team:
         raise HTTPException(status_code=404, detail="球队不存在")
+    if req.type not in TYPE_LABELS:
+        raise HTTPException(status_code=400, detail="事件类型无效")
+    if req.severity not in SEVERITY_LABELS:
+        raise HTTPException(status_code=400, detail="严重程度无效")
     event = Event(
         team_id=req.team_id, type=req.type, title=req.title,
         description=req.description, severity=req.severity,
         impact=req.impact, source=req.source, active=True,
+        source_type=req.source_type, source_url=req.source_url,
+        external_id=req.external_id, effective_at=req.effective_at,
+        expires_at=req.expires_at,
     )
     db.add(event)
     await db.commit()
+    get_engine().invalidate_cache()
     await db.refresh(event)
     result = await db.execute(
         select(Event).options(selectinload(Event.team)).where(Event.id == event.id)
@@ -93,7 +128,12 @@ async def update_event(event_id: int, req: EventUpdate, db: AsyncSession = Depen
         event.impact = req.impact
     if req.active is not None:
         event.active = req.active
+    for field_name in ("source", "source_type", "source_url", "external_id", "effective_at", "expires_at"):
+        value = getattr(req, field_name)
+        if value is not None:
+            setattr(event, field_name, value)
     await db.commit()
+    get_engine().invalidate_cache()
     result = await db.execute(
         select(Event).options(selectinload(Event.team)).where(Event.id == event_id)
     )
@@ -107,4 +147,129 @@ async def delete_event(event_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="事件不存在")
     await db.delete(event)
     await db.commit()
+    get_engine().invalidate_cache()
     return {"deleted": True}
+
+
+def _parse_datetime(value) -> Optional[datetime]:
+    if value in (None, ""):
+        return None
+    if isinstance(value, datetime):
+        return value
+    return datetime.fromisoformat(str(value).replace("Z", "+00:00")).replace(tzinfo=None)
+
+
+def _parse_impact(value) -> Optional[dict]:
+    if value in (None, ""):
+        return None
+    if isinstance(value, dict):
+        return value
+    parsed = json.loads(str(value))
+    if not isinstance(parsed, dict):
+        raise ValueError("impact 必须是 JSON 对象")
+    return parsed
+
+
+@router.get("/import/template")
+async def download_import_template():
+    content = (
+        "fifa_code,type,title,description,severity,impact,source,source_type,source_url,external_id,effective_at,expires_at,active\n"
+        "ARG,MORALE,示例事件,事件说明,MAJOR,\"{\"\"team_morale\"\":0.1}\",官方公告,IMPORT,https://example.com,event-001,2026-06-01T00:00:00,2026-07-31T23:59:59,true\n"
+    )
+    return Response(
+        content=content.encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=event-import-template.csv"},
+    )
+
+
+@router.post("/import")
+async def import_events(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        records = FileEventSource().parse(file.filename or "", await file.read())
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    teams = (await db.execute(select(Team))).scalars().all()
+    team_by_code = {team.fifa_code.upper(): team for team in teams}
+    existing_events = (await db.execute(select(Event))).scalars().all()
+    by_external = {
+        (event.source_type or "MANUAL", event.external_id): event
+        for event in existing_events if event.external_id
+    }
+    by_fingerprint = {
+        (event.team_id, event.type, event.title.strip(), event.source or ""): event
+        for event in existing_events
+    }
+
+    created = updated = skipped = 0
+    errors: list[dict] = []
+    for row_number, raw in enumerate(records, start=2):
+        try:
+            code = str(raw.get("fifa_code", "")).strip().upper()
+            team = team_by_code.get(code)
+            if not team:
+                raise ValueError(f"未知 FIFA code：{code or '空'}")
+            event_type = str(raw.get("type", "")).strip().upper()
+            severity = str(raw.get("severity", "MINOR")).strip().upper()
+            title = str(raw.get("title", "")).strip()
+            if event_type not in TYPE_LABELS:
+                raise ValueError(f"事件类型无效：{event_type}")
+            if severity not in SEVERITY_LABELS:
+                raise ValueError(f"严重程度无效：{severity}")
+            if not title:
+                raise ValueError("标题不能为空")
+            source_type = str(raw.get("source_type", "IMPORT") or "IMPORT").strip().upper()
+            external_id = str(raw.get("external_id", "") or "").strip() or None
+            source = str(raw.get("source", "") or "").strip() or None
+            active_raw = str(raw.get("active", "true")).strip().lower()
+            payload = {
+                "team_id": team.id,
+                "type": event_type,
+                "title": title,
+                "description": str(raw.get("description", "") or "").strip() or None,
+                "severity": severity,
+                "impact": _parse_impact(raw.get("impact")),
+                "source": source,
+                "source_type": source_type,
+                "source_url": str(raw.get("source_url", "") or "").strip() or None,
+                "external_id": external_id,
+                "effective_at": _parse_datetime(raw.get("effective_at")),
+                "expires_at": _parse_datetime(raw.get("expires_at")),
+                "active": active_raw not in ("false", "0", "no", "否"),
+            }
+            event = by_external.get((source_type, external_id)) if external_id else None
+            event = event or by_fingerprint.get((team.id, event_type, title, source or ""))
+            if event:
+                changed = any(getattr(event, key) != value for key, value in payload.items())
+                if changed:
+                    for key, value in payload.items():
+                        setattr(event, key, value)
+                    updated += 1
+                else:
+                    skipped += 1
+            else:
+                event = Event(**payload)
+                db.add(event)
+                created += 1
+                if external_id:
+                    by_external[(source_type, external_id)] = event
+                by_fingerprint[(team.id, event_type, title, source or "")] = event
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            errors.append({"row": row_number, "error": str(exc)})
+
+    await db.commit()
+    if created or updated:
+        get_engine().invalidate_cache()
+    return {
+        "filename": file.filename,
+        "total": len(records),
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+        "failed": len(errors),
+        "errors": errors,
+    }

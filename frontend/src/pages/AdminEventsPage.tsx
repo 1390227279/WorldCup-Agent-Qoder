@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../services/api";
-import type { Event, Team } from "../types";
+import type { Event, EventImportResult, Team } from "../types";
 
 const TYPE_OPTIONS = [
   { value: "INJURY", label: "伤病" },
@@ -21,21 +21,47 @@ const SEV_OPTIONS = [
 export default function AdminEventsPage() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ team_id: 0, type: "INJURY", title: "", description: "", severity: "MINOR", impact: "", source: "" });
+  const [importResult, setImportResult] = useState<EventImportResult | null>(null);
+  const [form, setForm] = useState({
+    team_id: 0, type: "INJURY", title: "", description: "", severity: "MINOR",
+    impact: "", source: "", source_type: "MANUAL", source_url: "",
+    external_id: "", effective_at: "", expires_at: "",
+  });
 
-  const { data: events, isLoading } = useQuery({ queryKey: ["events"], queryFn: api.getEvents });
+  const { data: events, isLoading } = useQuery({ queryKey: ["events"], queryFn: () => api.getEvents() });
   const { data: teams } = useQuery({ queryKey: ["teams"], queryFn: api.getTeams });
 
-  const createMut = useMutation({ mutationFn: api.createEvent, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["events"] }); setShowForm(false); } });
-  const toggleMut = useMutation({ mutationFn: ({ id, active }: { id: number; active: boolean }) => api.updateEvent(id, { active }), onSuccess: () => queryClient.invalidateQueries({ queryKey: ["events"] }) });
-  const deleteMut = useMutation({ mutationFn: api.deleteEvent, onSuccess: () => queryClient.invalidateQueries({ queryKey: ["events"] }) });
+  const invalidateEventData = () => {
+    queryClient.invalidateQueries({ queryKey: ["events"] });
+    queryClient.invalidateQueries({ queryKey: ["simulation"] });
+  };
+  const createMut = useMutation({ mutationFn: api.createEvent, onSuccess: () => { invalidateEventData(); setShowForm(false); } });
+  const toggleMut = useMutation({ mutationFn: ({ id, active }: { id: number; active: boolean }) => api.updateEvent(id, { active }), onSuccess: invalidateEventData });
+  const deleteMut = useMutation({ mutationFn: api.deleteEvent, onSuccess: invalidateEventData });
+  const importMut = useMutation({
+    mutationFn: api.importEvents,
+    onSuccess: (result) => {
+      setImportResult(result);
+      invalidateEventData();
+    },
+  });
 
   const handleCreate = () => {
     let impact: Record<string, number> | undefined;
     if (form.impact.trim()) {
       try { impact = JSON.parse(form.impact); } catch { alert("影响值 JSON 格式错误"); return; }
     }
-    createMut.mutate({ ...form, team_id: Number(form.team_id), impact, description: form.description || undefined, source: form.source || undefined });
+    createMut.mutate({
+      ...form,
+      team_id: Number(form.team_id),
+      impact,
+      description: form.description || undefined,
+      source: form.source || undefined,
+      source_url: form.source_url || undefined,
+      external_id: form.external_id || undefined,
+      effective_at: form.effective_at || undefined,
+      expires_at: form.expires_at || undefined,
+    });
   };
 
   return (
@@ -47,10 +73,41 @@ export default function AdminEventsPage() {
           <h1 className="text-3xl font-bold mb-2">事件管理</h1>
           <p className="text-[var(--color-text-muted)] text-sm">伤病、教练变动、战术调整等动态事件会实时影响预测权重</p>
         </div>
-        <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm hover:opacity-90 transition-opacity">
-          {showForm ? "取消" : "+ 新建事件"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <a href={api.eventImportTemplateUrl} className="px-3 py-2 rounded-lg border border-white/15 text-sm">下载导入模板</a>
+          <label className="cursor-pointer px-3 py-2 rounded-lg border border-white/15 text-sm">
+            {importMut.isPending ? "导入中…" : "导入 CSV/JSON"}
+            <input
+              type="file"
+              accept=".csv,.json"
+              className="hidden"
+              disabled={importMut.isPending}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) importMut.mutate(file);
+                event.target.value = "";
+              }}
+            />
+          </label>
+          <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm hover:opacity-90 transition-opacity">
+            {showForm ? "取消" : "+ 新建事件"}
+          </button>
+        </div>
       </div>
+
+      {importResult && (
+        <div className="bg-[var(--color-surface)] rounded-xl p-4 mb-6 text-sm">
+          <p className="font-semibold mb-1">导入完成：共 {importResult.total} 条</p>
+          <p className="text-[var(--color-text-muted)]">
+            新增 {importResult.created} · 更新 {importResult.updated} · 跳过 {importResult.skipped} · 失败 {importResult.failed}
+          </p>
+          {importResult.errors.length > 0 && (
+            <div className="mt-2 max-h-32 overflow-y-auto text-xs text-[var(--color-accent)]">
+              {importResult.errors.map((error) => <p key={`${error.row}-${error.error}`}>第 {error.row} 行：{error.error}</p>)}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 创建表单 */}
       {showForm && (
@@ -91,6 +148,22 @@ export default function AdminEventsPage() {
             <div className="md:col-span-2">
               <label className="block text-xs text-[var(--color-text-muted)] mb-1">影响值（JSON）</label>
               <input value={form.impact} onChange={e => setForm({ ...form, impact: e.target.value })} placeholder='{"attack": -0.10, "team_morale": -0.05}' className="w-full bg-[var(--color-bg)] rounded-lg px-3 py-2 text-sm border border-[var(--color-text-muted)]/20 font-mono" />
+            </div>
+            <div>
+              <label className="block text-xs text-[var(--color-text-muted)] mb-1">生效时间</label>
+              <input type="datetime-local" value={form.effective_at} onChange={e => setForm({ ...form, effective_at: e.target.value })} className="w-full bg-[var(--color-bg)] rounded-lg px-3 py-2 text-sm border border-[var(--color-text-muted)]/20" />
+            </div>
+            <div>
+              <label className="block text-xs text-[var(--color-text-muted)] mb-1">失效时间</label>
+              <input type="datetime-local" value={form.expires_at} onChange={e => setForm({ ...form, expires_at: e.target.value })} className="w-full bg-[var(--color-bg)] rounded-lg px-3 py-2 text-sm border border-[var(--color-text-muted)]/20" />
+            </div>
+            <div>
+              <label className="block text-xs text-[var(--color-text-muted)] mb-1">来源链接</label>
+              <input value={form.source_url} onChange={e => setForm({ ...form, source_url: e.target.value })} placeholder="https://...（可选）" className="w-full bg-[var(--color-bg)] rounded-lg px-3 py-2 text-sm border border-[var(--color-text-muted)]/20" />
+            </div>
+            <div>
+              <label className="block text-xs text-[var(--color-text-muted)] mb-1">外部事件编号</label>
+              <input value={form.external_id} onChange={e => setForm({ ...form, external_id: e.target.value })} placeholder="用于去重（可选）" className="w-full bg-[var(--color-bg)] rounded-lg px-3 py-2 text-sm border border-[var(--color-text-muted)]/20" />
             </div>
           </div>
           <button onClick={handleCreate} disabled={!form.team_id || !form.title || createMut.isPending} className="w-full py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm hover:opacity-90 disabled:opacity-50 transition-opacity">

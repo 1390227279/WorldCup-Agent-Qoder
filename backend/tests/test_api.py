@@ -95,6 +95,86 @@ class TestEventsEndpoint:
         data = resp.json()
         assert isinstance(data, list)
 
+    async def test_event_crud_invalidates_simulation_cache(self, client):
+        initial = await client.get("/api/v1/bracket/simulation?iterations=100")
+        initial_id = initial.json()["simulation_id"]
+
+        created = await client.post("/api/v1/events", json={
+            "team_id": 1,
+            "type": "INJURY",
+            "title": "测试伤病事件",
+            "severity": "MINOR",
+            "impact": {"attack": -0.05},
+        })
+        assert created.status_code == 200
+        event_id = created.json()["id"]
+
+        after_create = await client.get("/api/v1/bracket/simulation?iterations=100")
+        assert after_create.json()["simulation_id"] != initial_id
+
+        updated = await client.put(f"/api/v1/events/{event_id}", json={"active": False})
+        assert updated.status_code == 200
+        assert updated.json()["active"] is False
+
+        deleted = await client.delete(f"/api/v1/events/{event_id}")
+        assert deleted.status_code == 200
+        assert deleted.json()["deleted"] is True
+
+    async def test_event_csv_import_is_validated_and_deduplicated(self, client):
+        template = await client.get("/api/v1/events/import/template")
+        assert template.status_code == 200
+        assert "fifa_code" in template.text
+
+        csv_content = (
+            "fifa_code,type,title,description,severity,impact,source,source_type,source_url,external_id,effective_at,expires_at,active\n"
+            "ARG,MORALE,批量导入事件,测试说明,MAJOR,\"{\"\"team_morale\"\":0.1}\",测试来源,IMPORT,https://example.com,import-001,2026-01-01T00:00:00,2030-01-01T00:00:00,true\n"
+            "XXX,INJURY,无效球队,测试,MINOR,{},测试来源,IMPORT,,invalid-001,,,true\n"
+        )
+        imported = await client.post(
+            "/api/v1/events/import",
+            files={"file": ("events.csv", csv_content.encode("utf-8"), "text/csv")},
+        )
+        assert imported.status_code == 200
+        result = imported.json()
+        assert result["created"] == 1
+        assert result["failed"] == 1
+        assert result["errors"][0]["row"] == 3
+
+        duplicate = await client.post(
+            "/api/v1/events/import",
+            files={"file": ("events.csv", csv_content.splitlines()[0].encode("utf-8") + b"\n" + csv_content.splitlines()[1].encode("utf-8") + b"\n", "text/csv")},
+        )
+        assert duplicate.json()["skipped"] == 1
+
+        update_payload = [{
+            "fifa_code": "ARG", "type": "MORALE", "title": "批量导入事件",
+            "description": "更新后的说明", "severity": "CRITICAL",
+            "source": "测试来源", "source_type": "IMPORT", "external_id": "import-001",
+        }]
+        updated = await client.post(
+            "/api/v1/events/import",
+            files={"file": ("events.json", __import__("json").dumps(update_payload, ensure_ascii=False).encode("utf-8"), "application/json")},
+        )
+        assert updated.json()["updated"] == 1
+
+    async def test_expired_events_are_kept_in_history_but_excluded_from_current_list(self, client):
+        created = await client.post("/api/v1/events", json={
+            "team_id": 1,
+            "type": "OTHER",
+            "title": "已经到期的事件",
+            "severity": "MINOR",
+            "effective_at": "2020-01-01T00:00:00",
+            "expires_at": "2020-01-02T00:00:00",
+        })
+        assert created.status_code == 200
+        event_id = created.json()["id"]
+
+        history = await client.get("/api/v1/events")
+        assert event_id in {event["id"] for event in history.json()}
+
+        current = await client.get("/api/v1/events?active_only=true&current_only=true")
+        assert event_id not in {event["id"] for event in current.json()}
+
 
 class TestPredictionsEndpoint:
     async def test_predict_match_returns_result(self, client):
@@ -110,6 +190,11 @@ class TestPredictionsEndpoint:
         assert "is_valid" in body
         assert "prediction" in body
         assert "circuit_breaker" in body
+        assert body["prediction"]["predicted_score"]
+        assert all(
+            step["step_number"] > 0
+            for step in body["prediction"]["reasoning_chain"]
+        )
 
     async def test_predict_match_falls_back_to_fifa_code(self, client):
         """Stale bracket IDs can be recovered using stable FIFA codes."""
@@ -136,3 +221,30 @@ class TestBracketEndpoint:
         body = resp.json()
         assert "stages" in body
         assert "total_matches" in body
+
+    async def test_simulation_returns_complete_stable_bracket(self, client):
+        first = await client.get("/api/v1/bracket/simulation?iterations=100")
+        assert first.status_code == 200
+        body = first.json()
+        assert body["simulation_id"]
+        assert body["seed"] > 0
+        assert body["event_ids"] == []
+        assert {stage: len(body["stages"][stage]["matches"]) for stage in ("R32", "R16", "QF", "SF", "FINAL")} == {
+            "R32": 16, "R16": 8, "QF": 4, "SF": 2, "FINAL": 1,
+        }
+        all_matches = [
+            match
+            for stage in body["stages"].values()
+            for match in stage["matches"]
+        ]
+        assert all(match["match_key"] for match in all_matches)
+        assert all(match["home_team"]["id"] > 0 for match in all_matches)
+        assert all(match["away_team"]["id"] > 0 for match in all_matches)
+        assert all(match["winner_team_id"] > 0 for match in all_matches)
+        assert body["stages"]["FINAL"]["matches"][0]["winner"] == body["predicted_champion"]
+
+        cached = await client.get("/api/v1/bracket/simulation?iterations=100")
+        assert cached.json()["simulation_id"] == body["simulation_id"]
+
+        refreshed = await client.get("/api/v1/bracket/simulation?iterations=100&refresh=true")
+        assert refreshed.json()["simulation_id"] != body["simulation_id"]

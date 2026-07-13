@@ -1,13 +1,23 @@
-"""Monte Carlo Tournament Simulator — ELO + Poisson."""
+"""Monte Carlo Tournament Simulator — deterministic ELO + Poisson."""
 
-import time
 import threading
+import time
 import uuid
 from collections import defaultdict
 from typing import Optional
 
 import numpy as np
 
+from app.services.scenario_resolver import (
+    ATTACK_LAMBDA_DELTA,
+    CONCEDE_LAMBDA_DELTA,
+)
+from app.services.simulation_models import (
+    KeyedRandom,
+    MODEL_VERSION,
+    SimulationInput,
+    derive_child_seed,
+)
 from app.services.tournament_rules import (
     BracketSlot,
     GROUP_NAMES,
@@ -16,16 +26,39 @@ from app.services.tournament_rules import (
     rank_group,
 )
 
+
 ATTACK_FACTOR = 0.8
 DEFENSE_FACTOR = 0.6
 ELO_DIVISOR = 1000.0
+
+
 def _eg(attack_elo: float, defense_elo: float) -> float:
     atk = (attack_elo / ELO_DIVISOR) * ATTACK_FACTOR
-    df = (defense_elo / ELO_DIVISOR) * DEFENSE_FACTOR
-    if df < 0.1:
-        df = 0.1
-    x = atk / df
-    return x if x > 0.1 else 0.1
+    df = max((defense_elo / ELO_DIVISOR) * DEFENSE_FACTOR, 0.1)
+    return max(atk / df, 0.1)
+
+
+def _knockout_winner(
+    home,
+    away,
+    home_score: int,
+    away_score: int,
+    random_source: KeyedRandom,
+    stage: str,
+    match_index: int,
+):
+    if home_score > away_score:
+        return home, "REGULAR_TIME"
+    if away_score > home_score:
+        return away, "REGULAR_TIME"
+
+    home_penalty_probability = 1.0 / (1.0 + 10.0 ** ((away[3] - home[3]) / 400.0))
+    if (
+        random_source.uniform(stage, match_index, "penalties")
+        < home_penalty_probability
+    ):
+        return home, "PENALTIES"
+    return away, "PENALTIES"
 
 
 class MonteCarloEngine:
@@ -35,73 +68,115 @@ class MonteCarloEngine:
         self._lock = threading.Lock()
         self._rng = np.random.default_rng()
 
-    def run(self, teams: list[dict], iterations: int = 1000,
-            force_refresh: bool = False,
-            team_impacts: Optional[dict] = None,
-            event_ids: Optional[list[int]] = None) -> dict:
-        cache_key = ",".join(sorted(t["name"] for t in teams))
-        cache_key = f"{cache_key}:{iterations}"
-        if team_impacts:
-            impact_str = ",".join(f"{k}:{v}" for k, v in sorted(
-                (
-                    code,
-                    f"{imp.get('attack_lambda_delta',0):.2f},"
-                    f"{imp.get('concede_lambda_delta',0):.2f}",
-                )
-                for code, imp in team_impacts.items()
-            ))
-            cache_key = f"{cache_key}:imp({impact_str})"
-        cache_key = f"{cache_key}:events({','.join(map(str, sorted(event_ids or [])))})"
-
+    def run(
+        self,
+        teams: list[dict],
+        iterations: int = 1000,
+        force_refresh: bool = False,
+        team_impacts: Optional[dict] = None,
+        event_ids: Optional[list[int]] = None,
+        seed: int | None = None,
+    ) -> dict:
+        cache_seed = seed if seed is not None else "auto"
+        cache_key = self._pre_seed_cache_key(
+            teams, iterations, team_impacts, event_ids, cache_seed
+        )
         with self._lock:
             if not force_refresh and cache_key in self._cache:
-                ts, result = self._cache[cache_key]
-                if time.time() - ts < 300:
+                timestamp, result = self._cache[cache_key]
+                if time.time() - timestamp < 300:
                     return result
 
-        tid2info: dict[int, tuple] = {}
-        for t in teams:
-            tid2info[t["id"]] = (
-                t["name"], t["name_cn"],
-                t["elo_rating"] or 1500.0, t["group_name"],
-                t.get("fifa_code", "")
+        master_seed = seed or int(self._rng.integers(1, 2**31 - 1))
+        simulation_input = SimulationInput.from_raw(
+            teams,
+            iterations=iterations,
+            seed=master_seed,
+            team_impacts=team_impacts,
+            event_ids=event_ids,
+        )
+        team_ids = [team.id for team in simulation_input.teams]
+        team_info = {
+            team.id: (
+                team.name,
+                team.name_cn,
+                team.elo_rating,
+                team.group_name,
+                team.fifa_code,
             )
-        team_ids = list(tid2info.keys())
+            for team in simulation_input.teams
+        }
+        public_teams = {
+            team.id: team.to_public_dict() for team in simulation_input.teams
+        }
+        impacts = simulation_input.impact_by_code
 
-        seed = int(self._rng.integers(1, 2**31 - 1))
-        probability_rng = np.random.default_rng(seed)
-        path_rng = np.random.default_rng(seed ^ 0x5F3759DF)
         champion_counts: dict[str, int] = defaultdict(int)
-
-        for _ in range(iterations):
-            champ = self._sim_one(team_ids, tid2info, probability_rng, team_impacts)
-            champion_counts[champ] += 1
+        for iteration in range(simulation_input.iterations):
+            iteration_seed = derive_child_seed(master_seed, "iteration", iteration)
+            champion = self._sim_one(
+                team_ids,
+                team_info,
+                KeyedRandom(iteration_seed),
+                impacts,
+            )
+            champion_counts[champion] += 1
 
         total = max(sum(champion_counts.values()), 1)
-        probs = {name: count / total for name, count in champion_counts.items()}
-        top3 = sorted(probs.items(), key=lambda x: -x[1])[:3]
+        probabilities = {
+            name: champion_counts[name] / total for name in sorted(champion_counts)
+        }
+        top3 = sorted(probabilities.items(), key=lambda item: (-item[1], item[0]))[:3]
 
+        path_seed = derive_child_seed(master_seed, "temporary-path")
         path_champion, stages = self._sim_one(
-            team_ids, tid2info, path_rng, team_impacts,
+            team_ids,
+            team_info,
+            KeyedRandom(path_seed),
+            impacts,
             capture_path=True,
-            team_by_id={team["id"]: team for team in teams},
+            team_by_id=public_teams,
         )
 
         result = {
             "simulation_id": uuid.uuid4().hex,
-            "seed": seed,
-            "event_ids": sorted(event_ids or []),
-            "champion_probs": probs,
+            "seed": master_seed,
+            "event_ids": list(simulation_input.event_ids),
+            "champion_probs": probabilities,
             "top3": top3,
-            "iterations": iterations,
+            "iterations": simulation_input.iterations,
+            "model_version": MODEL_VERSION,
+            "input_fingerprint": simulation_input.fingerprint(),
             "predicted_champion": path_champion,
             "stages": stages,
         }
-
         with self._lock:
             self._cache[cache_key] = (time.time(), result)
-
         return result
+
+    @staticmethod
+    def _pre_seed_cache_key(
+        teams: list[dict],
+        iterations: int,
+        team_impacts: dict | None,
+        event_ids: list[int] | None,
+        seed: int | str,
+    ) -> str:
+        team_part = ",".join(
+            f"{team['id']}:{team.get('elo_rating') or 1500}:"
+            f"{team.get('group_name')}:{team.get('pot')}"
+            for team in sorted(teams, key=lambda item: item["id"])
+        )
+        impact_part = ",".join(
+            f"{code}:{values.get(ATTACK_LAMBDA_DELTA, 0.0):.4f}:"
+            f"{values.get(CONCEDE_LAMBDA_DELTA, 0.0):.4f}"
+            for code, values in sorted((team_impacts or {}).items())
+        )
+        event_part = ",".join(map(str, sorted(event_ids or [])))
+        return (
+            f"{MODEL_VERSION}|{seed}|{iterations}|{team_part}|"
+            f"{impact_part}|{event_part}"
+        )
 
     def invalidate_cache(self) -> None:
         with self._lock:
@@ -110,119 +185,145 @@ class MonteCarloEngine:
     def _sim_one(
         self,
         team_ids,
-        tid2info,
-        rng,
+        team_info,
+        random_source: KeyedRandom,
         team_impacts=None,
         capture_path: bool = False,
         team_by_id: Optional[dict[int, dict]] = None,
     ):
-        # Group stage setup: list of [tid, name, cn, elo, pts, gf, ga, gd]
-        groups = {g: [] for g in GROUP_NAMES}
-        for tid in team_ids:
-            name, cn, elo, grp, _code = tid2info[tid]
-            groups[grp].append([tid, name, cn, elo, 0, 0, 0, 0])
+        # Group record: [team_id, name, name_cn, elo, points, gf, ga, gd]
+        groups = {group: [] for group in GROUP_NAMES}
+        for team_id in team_ids:
+            name, name_cn, elo, group_name, _code = team_info[team_id]
+            groups[group_name].append([team_id, name, name_cn, elo, 0, 0, 0, 0])
 
-        for grp_records in groups.values():
-            for i in range(4):
-                ri = grp_records[i]
-                for j in range(i + 1, 4):
-                    rj = grp_records[j]
-                    if rng.random() < 0.5:
-                        a, b = ri, rj
+        for group_name, group_records in groups.items():
+            for first_index in range(4):
+                first = group_records[first_index]
+                for second_index in range(first_index + 1, 4):
+                    second = group_records[second_index]
+                    if (
+                        random_source.uniform(
+                            "GROUP", group_name, first_index, second_index, "home-order"
+                        )
+                        < 0.5
+                    ):
+                        home, away = first, second
                     else:
-                        a, b = rj, ri
-                    lambda_home = _eg(a[3], b[3])
-                    lambda_away = _eg(b[3], a[3])
-                    if team_impacts:
-                        home_code = tid2info[a[0]][4]
-                        away_code = tid2info[b[0]][4]
-                        home_imp = team_impacts.get(home_code, {})
-                        away_imp = team_impacts.get(away_code, {})
-                        lambda_home *= (1.0 + home_imp.get("attack_lambda_delta", 0.0)) * (1.0 + away_imp.get("concede_lambda_delta", 0.0))
-                        lambda_away *= (1.0 + away_imp.get("attack_lambda_delta", 0.0)) * (1.0 + home_imp.get("concede_lambda_delta", 0.0))
-                        lambda_home = max(lambda_home, 0.05)
-                        lambda_away = max(lambda_away, 0.05)
-                    hg = int(rng.poisson(lambda_home))
-                    ag = int(rng.poisson(lambda_away))
-                    if hg > ag:
-                        a[4] += 3
-                    elif ag > hg:
-                        b[4] += 3
+                        home, away = second, first
+                    home_lambda, away_lambda = self._match_lambdas(
+                        home, away, team_info, team_impacts
+                    )
+                    home_goals = random_source.poisson(
+                        home_lambda,
+                        "GROUP",
+                        group_name,
+                        first_index,
+                        second_index,
+                        "home-goals",
+                    )
+                    away_goals = random_source.poisson(
+                        away_lambda,
+                        "GROUP",
+                        group_name,
+                        first_index,
+                        second_index,
+                        "away-goals",
+                    )
+                    if home_goals > away_goals:
+                        home[4] += 3
+                    elif away_goals > home_goals:
+                        away[4] += 3
                     else:
-                        a[4] += 1
-                        b[4] += 1
-                    a[5] += hg; a[6] += ag; a[7] = a[5] - a[6]
-                    b[5] += ag; b[6] += hg; b[7] = b[5] - b[6]
+                        home[4] += 1
+                        away[4] += 1
+                    home[5] += home_goals
+                    home[6] += away_goals
+                    home[7] = home[5] - home[6]
+                    away[5] += away_goals
+                    away[6] += home_goals
+                    away[7] = away[5] - away[6]
 
         group_rankings = {}
-        for gn in GROUP_NAMES:
-            group_rankings[gn] = rank_group(
+        for group_name in GROUP_NAMES:
+            group_rankings[group_name] = rank_group(
                 GroupStanding(
                     team_id=record[0],
-                    group_name=gn,
+                    group_name=group_name,
                     points=record[4],
                     goal_difference=record[7],
                     goals_for=record[5],
                     elo_rating=record[3],
                     payload=record,
                 )
-                for record in groups[gn]
+                for record in groups[group_name]
             )
 
         round_of_32 = build_round_of_32_pairings(group_rankings)
         current = [
-            slot
-            for pairing in round_of_32
-            for slot in (pairing.home, pairing.away)
+            slot for pairing in round_of_32 for slot in (pairing.home, pairing.away)
         ]
-
         stages: dict[str, dict] = {}
         stage_names = ["R32", "R16", "QF", "SF"]
         stage_labels = {
-            "R32": "32 强", "R16": "16 强", "QF": "1/4 决赛",
-            "SF": "半决赛", "FINAL": "决赛",
+            "R32": "32 强",
+            "R16": "16 强",
+            "QF": "1/4 决赛",
+            "SF": "半决赛",
+            "FINAL": "决赛",
         }
 
         for stage_name in stage_names:
             winners = []
             stage_matches = []
-            for k in range(0, len(current), 2):
-                a_slot, b_slot = current[k], current[k + 1]
-                if rng.random() < 0.5:
-                    a_slot, b_slot = b_slot, a_slot
-                a, b = a_slot.payload, b_slot.payload
-                lambda_home = _eg(a[3], b[3])
-                lambda_away = _eg(b[3], a[3])
-                if team_impacts:
-                    home_code = tid2info[a[0]][4]
-                    away_code = tid2info[b[0]][4]
-                    home_imp = team_impacts.get(home_code, {})
-                    away_imp = team_impacts.get(away_code, {})
-                    lambda_home *= (1.0 + home_imp.get("attack_lambda_delta", 0.0)) * (1.0 + away_imp.get("concede_lambda_delta", 0.0))
-                    lambda_away *= (1.0 + away_imp.get("attack_lambda_delta", 0.0)) * (1.0 + home_imp.get("concede_lambda_delta", 0.0))
-                    lambda_home = max(lambda_home, 0.05)
-                    lambda_away = max(lambda_away, 0.05)
-                hg = int(rng.poisson(lambda_home))
-                ag = int(rng.poisson(lambda_away))
-                if hg > ag:
-                    winner = a
-                elif ag > hg:
-                    winner = b
-                else:
-                    winner = a if a[3] >= b[3] else b
-                match_index = len(winners)
+            for match_index in range(len(current) // 2):
+                home_slot = current[match_index * 2]
+                away_slot = current[match_index * 2 + 1]
+                if random_source.uniform(stage_name, match_index, "home-order") >= 0.5:
+                    home_slot, away_slot = away_slot, home_slot
+                home, away = home_slot.payload, away_slot.payload
+                home_lambda, away_lambda = self._match_lambdas(
+                    home, away, team_info, team_impacts
+                )
+                home_goals = random_source.poisson(
+                    home_lambda, stage_name, match_index, "home-goals"
+                )
+                away_goals = random_source.poisson(
+                    away_lambda, stage_name, match_index, "away-goals"
+                )
+                winner, decided_by = _knockout_winner(
+                    home,
+                    away,
+                    home_goals,
+                    away_goals,
+                    random_source,
+                    stage_name,
+                    match_index,
+                )
                 match_key = f"{stage_name}-{match_index + 1}"
-                winners.append(BracketSlot(
-                    team_id=winner[0],
-                    payload=winner,
-                    source_slot=match_key,
-                ))
+                winners.append(
+                    BracketSlot(
+                        team_id=winner[0],
+                        payload=winner,
+                        source_slot=match_key,
+                    )
+                )
                 if capture_path and team_by_id is not None:
-                    stage_matches.append(self._path_match(
-                        stage_name, len(stage_matches), a, b, hg, ag,
-                        winner, team_by_id, stage_labels[stage_name],
-                        [a_slot.source_slot, b_slot.source_slot],
-                    ))
+                    stage_matches.append(
+                        self._path_match(
+                            stage_name,
+                            match_index,
+                            home,
+                            away,
+                            home_goals,
+                            away_goals,
+                            winner,
+                            team_by_id,
+                            stage_labels[stage_name],
+                            [home_slot.source_slot, away_slot.source_slot],
+                            decided_by,
+                        )
+                    )
             current = winners
             if capture_path:
                 stages[stage_name] = {
@@ -230,41 +331,62 @@ class MonteCarloEngine:
                     "matches": stage_matches,
                 }
 
-        a_slot, b_slot = current[0], current[1]
-        if rng.random() < 0.5:
-            a_slot, b_slot = b_slot, a_slot
-        a, b = a_slot.payload, b_slot.payload
-        lambda_home = _eg(a[3], b[3])
-        lambda_away = _eg(b[3], a[3])
-        if team_impacts:
-            home_code = tid2info[a[0]][4]
-            away_code = tid2info[b[0]][4]
-            home_imp = team_impacts.get(home_code, {})
-            away_imp = team_impacts.get(away_code, {})
-            lambda_home *= (1.0 + home_imp.get("attack_lambda_delta", 0.0)) * (1.0 + away_imp.get("concede_lambda_delta", 0.0))
-            lambda_away *= (1.0 + away_imp.get("attack_lambda_delta", 0.0)) * (1.0 + home_imp.get("concede_lambda_delta", 0.0))
-            lambda_home = max(lambda_home, 0.05)
-            lambda_away = max(lambda_away, 0.05)
-        hg = int(rng.poisson(lambda_home))
-        ag = int(rng.poisson(lambda_away))
-        if hg > ag:
-            winner = a
-        elif ag > hg:
-            winner = b
-        else:
-            winner = a if a[3] >= b[3] else b
-
+        home_slot, away_slot = current
+        if random_source.uniform("FINAL", 0, "home-order") >= 0.5:
+            home_slot, away_slot = away_slot, home_slot
+        home, away = home_slot.payload, away_slot.payload
+        home_lambda, away_lambda = self._match_lambdas(
+            home, away, team_info, team_impacts
+        )
+        home_goals = random_source.poisson(home_lambda, "FINAL", 0, "home-goals")
+        away_goals = random_source.poisson(away_lambda, "FINAL", 0, "away-goals")
+        winner, decided_by = _knockout_winner(
+            home,
+            away,
+            home_goals,
+            away_goals,
+            random_source,
+            "FINAL",
+            0,
+        )
         if capture_path and team_by_id is not None:
             stages["FINAL"] = {
                 "label": stage_labels["FINAL"],
-                "matches": [self._path_match(
-                    "FINAL", 0, a, b, hg, ag, winner,
-                    team_by_id, stage_labels["FINAL"],
-                    [a_slot.source_slot, b_slot.source_slot],
-                )],
+                "matches": [
+                    self._path_match(
+                        "FINAL",
+                        0,
+                        home,
+                        away,
+                        home_goals,
+                        away_goals,
+                        winner,
+                        team_by_id,
+                        stage_labels["FINAL"],
+                        [home_slot.source_slot, away_slot.source_slot],
+                        decided_by,
+                    )
+                ],
             }
             return winner[1], stages
         return winner[1]
+
+    @staticmethod
+    def _match_lambdas(home, away, team_info, team_impacts):
+        home_lambda = _eg(home[3], away[3])
+        away_lambda = _eg(away[3], home[3])
+        if team_impacts:
+            home_code = team_info[home[0]][4]
+            away_code = team_info[away[0]][4]
+            home_impact = team_impacts.get(home_code, {})
+            away_impact = team_impacts.get(away_code, {})
+            home_lambda *= (1.0 + home_impact.get(ATTACK_LAMBDA_DELTA, 0.0)) * (
+                1.0 + away_impact.get(CONCEDE_LAMBDA_DELTA, 0.0)
+            )
+            away_lambda *= (1.0 + away_impact.get(ATTACK_LAMBDA_DELTA, 0.0)) * (
+                1.0 + home_impact.get(CONCEDE_LAMBDA_DELTA, 0.0)
+            )
+        return home_lambda, away_lambda
 
     @staticmethod
     def _path_match(
@@ -278,8 +400,15 @@ class MonteCarloEngine:
         team_by_id: dict[int, dict],
         label: str,
         source_slots: list[str],
+        decided_by: str,
     ) -> dict:
-        stage_offsets = {"R32": 100, "R16": 200, "QF": 300, "SF": 400, "FINAL": 500}
+        stage_offsets = {
+            "R32": 100,
+            "R16": 200,
+            "QF": 300,
+            "SF": 400,
+            "FINAL": 500,
+        }
         return {
             "id": -(stage_offsets[stage] + match_index + 1),
             "match_key": f"{stage}-{match_index + 1}",
@@ -292,6 +421,7 @@ class MonteCarloEngine:
             "winner_team_id": winner[0],
             "winner": winner[1],
             "source_slots": source_slots,
+            "decided_by": decided_by,
             "is_simulated": True,
             "match_order": match_index,
         }

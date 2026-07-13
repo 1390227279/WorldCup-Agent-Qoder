@@ -189,6 +189,7 @@ async def get_team_bracket_path(
 @router.get("/simulation")
 async def get_simulation_results(
     iterations: int = Query(1000, ge=100, le=10000, description="模拟次数"),
+    seed: int | None = Query(None, ge=1, description="可选的可复现主种子"),
     refresh: bool = Query(False, description="强制重新计算（忽略缓存）"),
     event_ids: str = Query("", description="逗号分隔的事件ID"),
     db: AsyncSession = Depends(get_db),
@@ -233,6 +234,6 @@ async def get_simulation_results(
     engine = get_engine()
     result = engine.run(teams_data, iterations=iterations,
                         force_refresh=refresh, team_impacts=team_impacts,
-                        event_ids=scenario.requested_event_ids)
+                        event_ids=scenario.requested_event_ids, seed=seed)
     result.update(scenario.audit_dict())
     return result

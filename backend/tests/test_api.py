@@ -292,3 +292,24 @@ class TestBracketEndpoint:
         assert body["ignored_events"] == [
             {"event_id": 999999, "reason": "not_found"}
         ]
+
+    async def test_simulation_seed_is_reproducible(self, client):
+        first = await client.get(
+            "/api/v1/bracket/simulation?iterations=100&seed=20260713&refresh=true"
+        )
+        second = await client.get(
+            "/api/v1/bracket/simulation?iterations=100&seed=20260713&refresh=true"
+        )
+
+        assert first.status_code == second.status_code == 200
+        first_body = first.json()
+        second_body = second.json()
+        assert first_body["seed"] == second_body["seed"] == 20260713
+        assert first_body["input_fingerprint"] == second_body["input_fingerprint"]
+        assert first_body["champion_probs"] == second_body["champion_probs"]
+        assert first_body["stages"] == second_body["stages"]
+        assert all(
+            match["decided_by"] in {"REGULAR_TIME", "PENALTIES"}
+            for stage in first_body["stages"].values()
+            for match in stage["matches"]
+        )

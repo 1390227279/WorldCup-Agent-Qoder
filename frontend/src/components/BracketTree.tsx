@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type {
   Match,
-  AgentPrediction,
   BracketStage,
 } from "../types";
 
@@ -51,10 +50,8 @@ function matchCount(stageIdx: number): number {
 
 interface FlatMatch {
   match: Match;
-  prediction: AgentPrediction | null;
   stageIdx: number;
   matchIdx: number;
-  feederIndices: [number, number] | null;
 }
 
 function buildFlatMatches(
@@ -64,14 +61,13 @@ function buildFlatMatches(
   const result: FlatMatch[] = [];
   if (!stages) return result;
   stageOrder.forEach((stageName, stageIdx) => {
-    const matches = stages[stageName]?.matches ?? [];
+    const matches = [...(stages[stageName]?.matches ?? [])]
+      .sort((a, b) => (a.match_order ?? 0) - (b.match_order ?? 0));
     matches.slice(0, matchCount(stageIdx)).forEach((match, matchIdx) => {
       result.push({
         match,
-        prediction: match.prediction ?? null,
         stageIdx,
         matchIdx,
-        feederIndices: stageIdx > 0 ? [matchIdx * 2, matchIdx * 2 + 1] : null,
       });
     });
   });
@@ -79,14 +75,13 @@ function buildFlatMatches(
 }
 
 function MatchDetailCard({ flatMatch, svgWidth }: { flatMatch: FlatMatch; svgWidth: number }) {
-  const { match, prediction } = flatMatch;
-  const winnerName = prediction?.winner?.toLowerCase() === "draw"
-    ? "平局"
-    : prediction?.winner === match.home_team?.name
-      ? match.home_team?.name_cn
-      : prediction?.winner === match.away_team?.name
-        ? match.away_team?.name_cn
-        : prediction?.winner;
+  const { match } = flatMatch;
+  const winnerTeam = match.winner_team_id === match.home_team?.id
+    ? match.home_team
+    : match.winner_team_id === match.away_team?.id
+      ? match.away_team
+      : null;
+  const winnerName = winnerTeam?.name_cn || winnerTeam?.name || match.winner || "-";
   const x = COL_X[flatMatch.stageIdx];
   const y = yCenter(flatMatch.stageIdx, flatMatch.matchIdx);
   const popLeft = x + NODE_W + 12 > svgWidth - 260 ? x - 260 : x + NODE_W + 12;
@@ -103,29 +98,18 @@ function MatchDetailCard({ flatMatch, svgWidth }: { flatMatch: FlatMatch; svgWid
           <span>{flagEmoji(match.away_team?.fifa_code)} {match.away_team?.name_cn ?? match.away_team?.name ?? "TBD"}</span>
           <span style={{ fontWeight: 700 }}>{match.away_score ?? "-"}</span>
         </div>
-        {prediction && (
-          <>
-            <div style={{ borderTop: "1px solid #333", paddingTop: 8, marginBottom: 6 }}>
-              <span style={{ color: prediction.is_agent ? "var(--color-gold)" : "var(--color-text-muted)" }}>
-                {prediction.is_agent ? "🤖 智能预测" : "📊 统计预测"}
-              </span>
-              <span style={{ float: "right", fontWeight: 600 }}>{((prediction.confidence ?? 0.5) * 100).toFixed(0)}%</span>
-            </div>
-            <div style={{ color: "var(--color-text-muted)", fontSize: 11, marginBottom: 4 }}>
-              获胜方：<strong style={{ color: "var(--color-text)" }}>{winnerName ?? "-"}</strong>
-            </div>
-            <div style={{ color: "var(--color-text-muted)", fontSize: 11, marginBottom: 4 }}>
-              预测方式：{prediction.is_agent ? "智能综合分析" : "统计模型分析"}
-            </div>
-            {prediction.key_factors && (
-              <div style={{ marginTop: 6 }}>
-                {prediction.key_factors.slice(0, 3).map((f, i) => (
-                  <div key={i} style={{ color: "var(--color-text-muted)", fontSize: 10, marginTop: 2 }}>· {f}</div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
+        <div style={{ borderTop: "1px solid #333", paddingTop: 8, marginBottom: 6 }}>
+          <span style={{ color: "var(--color-text-muted)" }}>📊 数学模型代表路径</span>
+        </div>
+        <div style={{ color: "var(--color-text-muted)", fontSize: 11, marginBottom: 4 }}>
+          获胜方：<strong style={{ color: "var(--color-text)" }}>{winnerName}</strong>
+        </div>
+        <div style={{ color: "var(--color-text-muted)", fontSize: 11, marginBottom: 4 }}>
+          决胜方式：{match.decided_by === "PENALTIES" ? "点球决胜" : "常规时间"}
+        </div>
+        <div style={{ color: "var(--color-text-muted)", fontSize: 10 }}>
+          比赛编号：{match.match_key ?? match.id}
+        </div>
       </div>
     </foreignObject>
   );
@@ -134,19 +118,31 @@ function MatchDetailCard({ flatMatch, svgWidth }: { flatMatch: FlatMatch; svgWid
 interface BracketTreeProps {
   stages: Record<string, BracketStage> | null;
   eventInfluenced?: boolean;
-  onMatchClick?: (match: Match, prediction: AgentPrediction | null) => void;
+  onMatchClick?: (match: Match) => void;
 }
 
 export default function BracketTree({ stages, eventInfluenced, onMatchClick }: BracketTreeProps) {
-  const [hoveredId, setHoveredId] = useState<number | null>(null);
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
   const flatMatches = useMemo(
     () => buildFlatMatches(stages),
     [stages],
   );
+  const matchesByKey = useMemo(
+    () => new Map(
+      flatMatches
+        .filter((flatMatch) => flatMatch.match.match_key)
+        .map((flatMatch) => [flatMatch.match.match_key as string, flatMatch]),
+    ),
+    [flatMatches],
+  );
   const svgW = COL_X[COL_X.length - 1] + NODE_W + 16;
   const svgH = TOTAL_H;
-  const hoveredFlat = hoveredId != null ? flatMatches.find((f) => f.match.id === hoveredId) : null;
-  const hasData = !!stages;
+  const hoveredFlat = hoveredKey != null
+    ? flatMatches.find((flatMatch) => (
+      (flatMatch.match.match_key ?? String(flatMatch.match.id)) === hoveredKey
+    ))
+    : null;
+  const hasData = flatMatches.length > 0;
 
   if (!hasData) {
     return (
@@ -190,48 +186,47 @@ export default function BracketTree({ stages, eventInfluenced, onMatchClick }: B
                 </text>
               ))}
               {flatMatches.map((fm) => {
-                if (fm.stageIdx === 0 || !fm.feederIndices) return null;
-                const prevStage = fm.stageIdx - 1;
-                const [fi1, fi2] = fm.feederIndices;
+                if (fm.stageIdx === 0) return null;
+                const feeders = (fm.match.source_slots ?? [])
+                  .map((sourceSlot) => matchesByKey.get(sourceSlot))
+                  .filter((feeder): feeder is FlatMatch => feeder != null);
                 const rx = COL_X[fm.stageIdx];
                 const midX = rx - COL_GAP / 2;
                 const ry = yCenter(fm.stageIdx, fm.matchIdx);
-                return [fi1, fi2].map((fi, k) => {
-                  const ly = yCenter(prevStage, fi);
-                  const lx = COL_X[prevStage] + NODE_W;
-                  const delay = fm.stageIdx * 0.15 + fi * 0.02;
+                return feeders.map((feeder) => {
+                  const ly = yCenter(feeder.stageIdx, feeder.matchIdx);
+                  const lx = COL_X[feeder.stageIdx] + NODE_W;
+                  const delay = fm.stageIdx * 0.15 + feeder.matchIdx * 0.02;
                   return (
-                    <motion.path key={`conn-${fm.match.id}-${k}`} d={`M${lx},${ly} H${midX} V${ry} H${rx}`} fill="none" stroke="var(--color-text-muted)" strokeWidth={1.2} strokeOpacity={0.35} initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 0.35 }} transition={{ delay, duration: 0.5, ease: "easeOut" }} />
+                    <motion.path key={`conn-${fm.match.match_key}-${feeder.match.match_key}`} d={`M${lx},${ly} H${midX} V${ry} H${rx}`} fill="none" stroke="var(--color-text-muted)" strokeWidth={1.2} strokeOpacity={0.35} initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 0.35 }} transition={{ delay, duration: 0.5, ease: "easeOut" }} />
                   );
                 });
               })}
               {flatMatches.map((fm) => {
-                const { match, prediction } = fm;
+                const { match } = fm;
                 const x = COL_X[fm.stageIdx];
                 const y = yCenter(fm.stageIdx, fm.matchIdx) - NODE_H / 2;
-                const isAgent = prediction?.is_agent ?? true;
                 const isFinal = fm.stageIdx === STAGES.length - 1;
                 const delay = fm.stageIdx * 0.18 + fm.matchIdx * 0.03;
-                const isHovered = hoveredId === match.id;
-                const strokeColor = isFinal ? "var(--color-gold)" : eventInfluenced ? "var(--color-gold)" : isAgent ? "var(--color-primary)" : "var(--color-text-muted)";
+                const matchKey = match.match_key ?? String(match.id);
+                const isHovered = hoveredKey === matchKey;
+                const homeWinner = match.winner_team_id === match.home_team?.id;
+                const awayWinner = match.winner_team_id === match.away_team?.id;
+                const strokeColor = isFinal || eventInfluenced
+                  ? "var(--color-gold)"
+                  : "var(--color-primary)";
                 return (
-                  <motion.g key={match.id} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay, duration: 0.4, ease: "easeOut" }} onMouseEnter={() => setHoveredId(match.id)} onMouseLeave={() => setHoveredId(null)} onClick={() => onMatchClick?.(match, prediction)} style={{ cursor: "pointer" }}>
-                    <rect x={x} y={y} width={NODE_W} height={NODE_H} rx={6} fill={isHovered ? "#1e1e3a" : "var(--color-surface)"} stroke={strokeColor} strokeWidth={isHovered ? 2 : isFinal ? 2 : 1} strokeDasharray={isAgent ? undefined : "5 3"} style={{ transition: "fill 0.15s, stroke-width 0.15s" }} />
-                    <text x={x + 8} y={y + 13} fill="var(--color-text)" fontSize={9.5} fontFamily="Inter, system-ui, sans-serif">
+                  <motion.g key={matchKey} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay, duration: 0.4, ease: "easeOut" }} onMouseEnter={() => setHoveredKey(matchKey)} onMouseLeave={() => setHoveredKey(null)} onClick={() => onMatchClick?.(match)} style={{ cursor: "pointer" }}>
+                    <rect x={x} y={y} width={NODE_W} height={NODE_H} rx={6} fill={isHovered ? "#1e1e3a" : "var(--color-surface)"} stroke={strokeColor} strokeWidth={isHovered ? 2 : isFinal ? 2 : 1} style={{ transition: "fill 0.15s, stroke-width 0.15s" }} />
+                    <text x={x + 8} y={y + 13} fill={homeWinner ? "var(--color-gold)" : "var(--color-text)"} fontSize={9.5} fontWeight={homeWinner ? 700 : 400} fontFamily="Inter, system-ui, sans-serif">
                       {match.home_team ? `${flagEmoji(match.home_team.fifa_code)} ${match.home_team.name_cn || match.home_team.name}` : "待定"}
                     </text>
-                    <text x={x + NODE_W - 8} y={y + 13} fill="var(--color-text)" fontSize={10} fontWeight="bold" textAnchor="end" fontFamily="Inter, system-ui, sans-serif">{match.home_score ?? "-"}</text>
+                    <text x={x + NODE_W - 8} y={y + 13} fill={homeWinner ? "var(--color-gold)" : "var(--color-text)"} fontSize={10} fontWeight="bold" textAnchor="end" fontFamily="Inter, system-ui, sans-serif">{match.home_score ?? "-"}</text>
                     <line x1={x + 8} y1={y + NODE_H / 2} x2={x + NODE_W - 8} y2={y + NODE_H / 2} stroke="var(--color-text-muted)" strokeOpacity={0.15} />
-                    <text x={x + 8} y={y + 31} fill="var(--color-text)" fontSize={9.5} fontFamily="Inter, system-ui, sans-serif">
+                    <text x={x + 8} y={y + 31} fill={awayWinner ? "var(--color-gold)" : "var(--color-text)"} fontSize={9.5} fontWeight={awayWinner ? 700 : 400} fontFamily="Inter, system-ui, sans-serif">
                       {match.away_team ? `${flagEmoji(match.away_team.fifa_code)} ${match.away_team.name_cn || match.away_team.name}` : "待定"}
                     </text>
-                    <text x={x + NODE_W - 8} y={y + 31} fill="var(--color-text)" fontSize={10} fontWeight="bold" textAnchor="end" fontFamily="Inter, system-ui, sans-serif">{match.away_score ?? "-"}</text>
-                    {prediction?.confidence != null && (
-                      <g>
-                        <rect x={x + NODE_W - 40} y={y + NODE_H / 2 - 7} width={30} height={14} rx={7} fill={isAgent ? "var(--color-gold)" : "var(--color-text-muted)"} fillOpacity={0.18} />
-                        <text x={x + NODE_W - 25} y={y + NODE_H / 2 + 4} fill={isAgent ? "var(--color-gold)" : "var(--color-text-muted)"} fontSize={8} fontWeight="bold" textAnchor="middle" fontFamily="Inter, system-ui, sans-serif">{Math.round(prediction.confidence * 100)}%</text>
-                      </g>
-                    )}
+                    <text x={x + NODE_W - 8} y={y + 31} fill={awayWinner ? "var(--color-gold)" : "var(--color-text)"} fontSize={10} fontWeight="bold" textAnchor="end" fontFamily="Inter, system-ui, sans-serif">{match.away_score ?? "-"}</text>
                   </motion.g>
                 );
               })}
@@ -256,8 +251,8 @@ export default function BracketTree({ stages, eventInfluenced, onMatchClick }: B
           pointerEvents: "none",
         }}
       >
-        <span>蓝色：智能预测</span>
-        <span>虚线：统计预测</span>
+        <span>{eventInfluenced ? "金色：当前事件情景路径" : "蓝色：基线代表路径"}</span>
+        <span>高亮球队：本场胜者</span>
         <span style={{ color: "var(--color-gold)" }}>金色：决赛</span>
       </div>
     </div>

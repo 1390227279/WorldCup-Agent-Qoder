@@ -31,6 +31,8 @@ export interface Match {
   match_key?: string;
   winner_team_id?: number;
   winner?: string;
+  source_slots?: string[];
+  decided_by?: "REGULAR_TIME" | "PENALTIES";
 }
 
 export interface AgentPrediction {
@@ -219,8 +221,6 @@ export interface SimulationResult {
   scenario: SimulationScenario;
   summary: SimulationSummary;
   representative_path: RepresentativePath;
-  /** 临时兼容字段；对阵图将在下一次提交中迁移到 representative_path。 */
-  stages: Record<string, BracketStage>;
 }
 
 /* ── API Response types ── */

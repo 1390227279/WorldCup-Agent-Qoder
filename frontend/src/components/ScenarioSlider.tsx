@@ -5,6 +5,7 @@ import type { Event, Team } from "../types";
 interface ScenarioSliderProps {
   selectedEventIds: number[];
   onChange: (ids: number[]) => void | Promise<void>;
+  disabled?: boolean;
 }
 
 const PAGE_SIZE = 20;
@@ -14,7 +15,7 @@ const SEVERITY_LABELS: Record<string, string> = {
   MINOR: "一般",
 };
 
-export default function ScenarioSlider({ selectedEventIds, onChange }: ScenarioSliderProps) {
+export default function ScenarioSlider({ selectedEventIds, onChange, disabled = false }: ScenarioSliderProps) {
   const [events, setEvents] = useState<Event[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,6 +27,7 @@ export default function ScenarioSlider({ selectedEventIds, onChange }: ScenarioS
   const [severityFilter, setSeverityFilter] = useState("");
   const [page, setPage] = useState(1);
   const [applying, setApplying] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([api.getEvents({ active_only: true, current_only: true }), api.getTeams()])
@@ -72,6 +74,7 @@ export default function ScenarioSlider({ selectedEventIds, onChange }: ScenarioS
 
   const showDrawer = () => {
     setDraftIds(selectedEventIds);
+    setApplyError(null);
     setOpen(true);
   };
 
@@ -79,6 +82,19 @@ export default function ScenarioSlider({ selectedEventIds, onChange }: ScenarioS
     setDraftIds((current) => current.includes(eventId)
       ? current.filter((id) => id !== eventId)
       : [...current, eventId]);
+  };
+
+  const applySelection = async (ids: number[], closeOnSuccess: boolean) => {
+    setApplying(true);
+    setApplyError(null);
+    try {
+      await onChange(ids);
+      if (closeOnSuccess) setOpen(false);
+    } catch (error) {
+      setApplyError(error instanceof Error ? error.message : "事件情景模拟失败");
+    } finally {
+      setApplying(false);
+    }
   };
 
   return (
@@ -99,14 +115,22 @@ export default function ScenarioSlider({ selectedEventIds, onChange }: ScenarioS
           )}
         </div>
         {selectedEventIds.length > 0 && (
-          <button onClick={() => void onChange([])} className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
+          <button
+            onClick={() => void applySelection([], false)}
+            disabled={disabled || applying}
+            className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] disabled:opacity-40"
+          >
             清空
           </button>
         )}
-        <button onClick={showDrawer} disabled={loading} className="rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs text-white disabled:opacity-50">
+        <button onClick={showDrawer} disabled={loading || disabled || applying} className="rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs text-white disabled:opacity-50">
           {loading ? "加载中…" : "选择事件"}
         </button>
       </div>
+
+      {!open && applyError && (
+        <p className="mt-2 text-xs text-[var(--color-accent)]">{applyError}</p>
+      )}
 
       {open && (
         <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
@@ -163,6 +187,9 @@ export default function ScenarioSlider({ selectedEventIds, onChange }: ScenarioS
             </div>
 
             <div className="border-t border-white/10 p-4">
+              {applyError && (
+                <p className="mb-3 text-sm text-[var(--color-accent)]">{applyError}</p>
+              )}
               <div className="mb-3 flex items-center justify-between text-xs text-[var(--color-text-muted)]">
                 <span>共 {filteredEvents.length} 项</span>
                 <div className="flex items-center gap-2">
@@ -174,16 +201,8 @@ export default function ScenarioSlider({ selectedEventIds, onChange }: ScenarioS
               <div className="flex gap-2">
                 <button onClick={() => setOpen(false)} className="flex-1 rounded-lg border border-white/15 py-2 text-sm">取消</button>
                 <button
-                  disabled={applying}
-                  onClick={async () => {
-                    setApplying(true);
-                    try {
-                      await onChange(draftIds);
-                      setOpen(false);
-                    } finally {
-                      setApplying(false);
-                    }
-                  }}
+                  disabled={applying || disabled}
+                  onClick={() => void applySelection(draftIds, true)}
                   className="flex-1 rounded-lg bg-[var(--color-primary)] py-2 text-sm text-white disabled:opacity-50"
                 >
                   {applying ? "模拟中…" : "应用并重新模拟"}

@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -7,14 +7,15 @@ import BracketTree from "../components/BracketTree";
 import ScenarioSlider from "../components/ScenarioSlider";
 import AIPunditPanel from "../components/AIPunditPanel";
 import { usePredictions } from "../hooks/usePredictions";
-import { api } from "../services/api";
+import { api, simulationQueryKeys } from "../services/api";
 import type { Match, AgentPrediction, SimulationResult } from "../types";
 
 export default function BracketSandboxPage() {
   const [selectedEventIds, setSelectedEventIds] = useState<number[]>([]);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
-  const [selectedPrediction, setSelectedPrediction] = useState<AgentPrediction | null>(null);
+  const [scenarioSimulation, setScenarioSimulation] = useState<SimulationResult | null>(null);
   const [isRefreshingSimulation, setIsRefreshingSimulation] = useState(false);
+  const [refreshError, setRefreshError] = useState<Error | null>(null);
   const queryClient = useQueryClient();
 
   const {
@@ -22,51 +23,97 @@ export default function BracketSandboxPage() {
     data: mutationResult,
     isPending,
     error: predictError,
+    reset: resetPrediction,
   } = usePredictions();
 
-  const eventKey = selectedEventIds.join(",");
-  const simulationQueryKey = ["simulation", eventKey] as const;
   const {
-    data: simulation,
+    data: baselineSimulation,
     isLoading,
-    isFetching,
-    error,
-    refetch,
+    isFetching: isFetchingBaseline,
+    error: baselineError,
+    refetch: refetchBaseline,
   } = useQuery<SimulationResult>({
-    queryKey: simulationQueryKey,
-    queryFn: () => api.getSimulation({ event_ids: eventKey || undefined }),
+    queryKey: simulationQueryKeys.baseline,
+    queryFn: () => api.getSimulation(),
     staleTime: 5 * 60 * 1000,
   });
 
+  const simulation = selectedEventIds.length > 0
+    ? scenarioSimulation
+    : baselineSimulation;
+  const error = baselineError ?? refreshError;
+  const isFetching = isFetchingBaseline || isRefreshingSimulation;
+
   const applyEventSelection = async (eventIds: number[]) => {
-    const nextEventKey = eventIds.join(",");
+    const normalizedIds = [...new Set(eventIds)].sort((a, b) => a - b);
+    setRefreshError(null);
+
+    if (normalizedIds.length === 0) {
+      setSelectedEventIds([]);
+      setScenarioSimulation(null);
+      setSelectedMatch(null);
+      resetPrediction();
+      return;
+    }
+    if (!baselineSimulation) {
+      throw new Error("基线模拟尚未加载完成，请稍后重试");
+    }
+
     const refreshed = await api.getSimulation({
-      event_ids: nextEventKey || undefined,
+      event_ids: normalizedIds,
+      baseline_simulation_id: baselineSimulation.simulation_id,
       refresh: true,
     });
-    queryClient.setQueryData(["simulation", nextEventKey], refreshed);
-    setSelectedEventIds(eventIds);
+    queryClient.setQueryData(
+      simulationQueryKeys.scenario(baselineSimulation.simulation_id, normalizedIds),
+      refreshed,
+    );
+    setScenarioSimulation(refreshed);
+    setSelectedEventIds(normalizedIds);
+    setSelectedMatch(null);
+    resetPrediction();
   };
 
   const refreshSimulation = async () => {
     setIsRefreshingSimulation(true);
+    setRefreshError(null);
     try {
-      const refreshed = await api.getSimulation({
-        event_ids: eventKey || undefined,
-        refresh: true,
-      });
-      queryClient.setQueryData(simulationQueryKey, refreshed);
+      const refreshedBaseline = await api.getSimulation({ refresh: true });
+      queryClient.setQueryData(simulationQueryKeys.baseline, refreshedBaseline);
+
+      if (selectedEventIds.length > 0) {
+        const refreshedScenario = await api.getSimulation({
+          event_ids: selectedEventIds,
+          baseline_simulation_id: refreshedBaseline.simulation_id,
+          refresh: true,
+        });
+        queryClient.setQueryData(
+          simulationQueryKeys.scenario(
+            refreshedBaseline.simulation_id,
+            selectedEventIds,
+          ),
+          refreshedScenario,
+        );
+        setScenarioSimulation(refreshedScenario);
+      } else {
+        setScenarioSimulation(null);
+      }
+      setSelectedMatch(null);
+      resetPrediction();
+    } catch (caughtError) {
+      setRefreshError(
+        caughtError instanceof Error ? caughtError : new Error("重新模拟失败"),
+      );
     } finally {
       setIsRefreshingSimulation(false);
     }
   };
 
   const handleMatchClick = useCallback(
-    (match: Match, prediction: AgentPrediction | null) => {
+    (match: Match) => {
       setSelectedMatch(match);
-      setSelectedPrediction(prediction);
+      resetPrediction();
       if (
-        !prediction &&
         match.home_team &&
         match.away_team &&
         match.home_team.id > 0 &&
@@ -78,11 +125,10 @@ export default function BracketSandboxPage() {
         });
       }
     },
-    [predictMatch],
+    [predictMatch, resetPrediction],
   );
 
   const effectivePrediction: AgentPrediction | null = (() => {
-    if (selectedPrediction) return selectedPrediction;
     const mp = mutationResult;
     if (mp?.prediction) {
       const p = mp.prediction;
@@ -107,6 +153,39 @@ export default function BracketSandboxPage() {
     return null;
   })();
 
+  const scenarioComparison = useMemo(() => {
+    if (
+      !baselineSimulation ||
+      !scenarioSimulation ||
+      scenarioSimulation.scenario.type !== "EVENT"
+    ) {
+      return null;
+    }
+    const affectedTeamIds = [...new Set(
+      scenarioSimulation.scenario.applied_events.map((event) => event.team_id),
+    )];
+    return {
+      events: scenarioSimulation.scenario.applied_events,
+      ignoredCount: scenarioSimulation.scenario.ignored_events.length,
+      teams: affectedTeamIds.map((teamId) => {
+        const scenarioAdvancement = scenarioSimulation.summary.advancement_probs[teamId];
+        const baselineAdvancement = baselineSimulation.summary.advancement_probs[teamId];
+        const baselineProbability = (
+          baselineSimulation.summary.champion_probs_by_team_id[teamId] ?? 0
+        );
+        const scenarioProbability = (
+          scenarioSimulation.summary.champion_probs_by_team_id[teamId] ?? 0
+        );
+        return {
+          teamId,
+          team: scenarioAdvancement?.team ?? baselineAdvancement?.team,
+          probability: scenarioProbability,
+          deltaPoints: (scenarioProbability - baselineProbability) * 100,
+        };
+      }),
+    };
+  }, [baselineSimulation, scenarioSimulation]);
+
   return (
     <div className="max-w-[1600px] mx-auto px-4 py-4">
       <Link
@@ -128,12 +207,56 @@ export default function BracketSandboxPage() {
           </button>
         </div>
         <p className="text-[var(--color-text-muted)]">
-          {selectedEventIds.length > 0 ? "当前情景模拟" : "默认赛事模拟"}
+          {simulation?.scenario.type === "EVENT" ? "当前事件情景路径" : "基线代表路径"}
           {simulation?.simulation_id ? ` · 模拟编号 ${simulation.simulation_id.slice(0, 8)}` : ""}
+        </p>
+        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+          代表路径是固定种子下的一条可复现推演路径，用于展示完整晋级过程，不代表唯一比赛结果。
         </p>
       </header>
 
-      <ScenarioSlider selectedEventIds={selectedEventIds} onChange={applyEventSelection} />
+      <ScenarioSlider
+        selectedEventIds={selectedEventIds}
+        onChange={applyEventSelection}
+        disabled={!baselineSimulation || isRefreshingSimulation}
+      />
+
+      {scenarioComparison && (
+        <section className="mb-4 rounded-xl border border-[var(--color-gold)]/30 bg-[var(--color-gold)]/5 p-3">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-semibold text-[var(--color-gold)]">当前事件情景</span>
+            <span className="text-[var(--color-text-muted)]">
+              已应用 {scenarioComparison.events.length} 个事件，影响 {scenarioComparison.teams.length} 支球队
+            </span>
+            {scenarioComparison.ignoredCount > 0 && (
+              <span className="text-[var(--color-accent)]">
+                {scenarioComparison.ignoredCount} 个事件未生效
+              </span>
+            )}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {scenarioComparison.teams.map((item) => (
+              <span key={item.teamId} className="rounded-full bg-[var(--color-bg)] px-3 py-1 text-xs">
+                {item.team?.name_cn || item.team?.name || `球队 ${item.teamId}`}
+                <span className="ml-1 text-[var(--color-text-muted)]">
+                  夺冠概率 {(item.probability * 100).toFixed(1)}%
+                </span>
+                <span className={`ml-1 ${item.deltaPoints > 0 ? "text-green-400" : item.deltaPoints < 0 ? "text-[var(--color-accent)]" : "text-[var(--color-text-muted)]"}`}>
+                  {item.deltaPoints > 0 ? "+" : ""}{item.deltaPoints.toFixed(1)} 个百分点
+                </span>
+              </span>
+            ))}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--color-text-muted)]">
+            {scenarioComparison.events.slice(0, 4).map((event) => (
+              <span key={event.event_id}>· {event.title}</span>
+            ))}
+            {scenarioComparison.events.length > 4 && (
+              <span>另有 {scenarioComparison.events.length - 4} 个事件</span>
+            )}
+          </div>
+        </section>
+      )}
 
       <div className="flex gap-4 items-start flex-col xl:flex-row">
         <div className="flex-1 min-w-0 bg-[var(--color-surface)] rounded-xl p-3 overflow-hidden relative">
@@ -159,7 +282,10 @@ export default function BracketSandboxPage() {
                 {error instanceof Error ? error.message : "加载失败"}
               </p>
               <button
-                onClick={() => refetch()}
+                onClick={() => {
+                  if (refreshError) void refreshSimulation();
+                  else void refetchBaseline();
+                }}
                 className="text-xs px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white hover:opacity-90 transition-opacity"
               >
                 重试
@@ -175,8 +301,8 @@ export default function BracketSandboxPage() {
                 </div>
               )}
               <BracketTree
-                stages={simulation?.stages ?? null}
-                eventInfluenced={selectedEventIds.length > 0}
+                stages={simulation?.representative_path.stages ?? null}
+                eventInfluenced={simulation?.scenario.type === "EVENT"}
                 onMatchClick={handleMatchClick}
               />
             </>
@@ -187,7 +313,7 @@ export default function BracketSandboxPage() {
           <AnimatePresence mode="wait">
             {selectedMatch ? (
               <motion.div
-                key={selectedMatch.id}
+                key={selectedMatch.match_key ?? selectedMatch.id}
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }}
@@ -201,7 +327,7 @@ export default function BracketSandboxPage() {
                     <button
                       onClick={() => {
                         setSelectedMatch(null);
-                        setSelectedPrediction(null);
+                        resetPrediction();
                       }}
                       className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] text-xs"
                     >

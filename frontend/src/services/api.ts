@@ -10,6 +10,12 @@ export interface SimulationParams {
 
 export const simulationQueryKeys = {
   baseline: ["simulation", "baseline"] as const,
+  scenario: (baselineSimulationId: string, eventIds: number[]) => [
+    "simulation",
+    "scenario",
+    baselineSimulationId,
+    [...eventIds].sort((a, b) => a - b).join(","),
+  ] as const,
 };
 
 async function throwAPIError(res: Response): Promise<never> {

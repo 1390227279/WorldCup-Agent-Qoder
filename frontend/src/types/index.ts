@@ -140,14 +140,86 @@ export interface ChampionPrediction {
   key_factors: string[];
 }
 
+export interface SimulationProbabilityEntry {
+  team: Team;
+  probability: number;
+}
+
+export interface AdvancementProbability {
+  team_id: number;
+  team: Team;
+  R32: number;
+  R16: number;
+  QF: number;
+  SF: number;
+  FINAL: number;
+  CHAMPION: number;
+}
+
+export interface SimulationSummary {
+  probability_leader: SimulationProbabilityEntry;
+  top3: SimulationProbabilityEntry[];
+  advancement_probs: Record<number, AdvancementProbability>;
+  champion_probs_by_team_id: Record<number, number>;
+}
+
+export interface SimulationScenario {
+  type: "BASELINE" | "EVENT";
+  label: string;
+  requested_event_ids: number[];
+  applied_events: Array<{
+    event_id: number;
+    team_id: number;
+    team_code: string;
+    title: string;
+    impact: Record<string, number>;
+  }>;
+  ignored_events: Array<{
+    event_id: number;
+    reason: string;
+  }>;
+  team_impacts: Record<string, Record<string, number>>;
+  team_event_ids: Record<string, number[]>;
+  event_content_fingerprint: string;
+}
+
+export interface SimulationTournament {
+  id: number;
+  code: string;
+  name: string;
+  name_cn: string;
+  year: number;
+  status: string;
+  data_version: string;
+  rules_version: string;
+  is_official: boolean;
+}
+
+export interface SimulationModel {
+  version: string;
+  iterations: number;
+  seed: number;
+  input_fingerprint: string;
+}
+
+export interface RepresentativePath {
+  path_type: string;
+  champion: Team;
+  iteration_index: number;
+  iteration_seed: number;
+  log_likelihood: number;
+  stages: Record<string, BracketStage>;
+}
+
 export interface SimulationResult {
   simulation_id: string;
-  seed: number;
-  event_ids: number[];
-  champion_probs: Record<string, number>;
-  top3: [string, number][];
-  iterations: number;
-  predicted_champion: string;
+  baseline_simulation_id: string;
+  tournament: SimulationTournament;
+  model: SimulationModel;
+  scenario: SimulationScenario;
+  summary: SimulationSummary;
+  representative_path: RepresentativePath;
+  /** 临时兼容字段；对阵图将在下一次提交中迁移到 representative_path。 */
   stages: Record<string, BracketStage>;
 }
 

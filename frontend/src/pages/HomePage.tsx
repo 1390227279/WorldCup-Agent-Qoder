@@ -1,19 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { api } from "../services/api";
+import { api, simulationQueryKeys } from "../services/api";
 import ChampionHero from "../components/ChampionHero";
 import ProbabilityBar from "../components/ProbabilityBar";
 import type { SimulationResult } from "../types";
 
 export default function HomePage() {
-  const { data: teams } = useQuery({
-    queryKey: ["teams"],
-    queryFn: api.getTeams,
-  });
-
   const { data: simulation } = useQuery<SimulationResult>({
-    queryKey: ["simulation", ""],
-    queryFn: api.getSimulation as () => Promise<SimulationResult>,
+    queryKey: simulationQueryKeys.baseline,
+    queryFn: () => api.getSimulation(),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -21,22 +16,22 @@ export default function HomePage() {
     <div className="max-w-6xl mx-auto px-4 py-8">
       <header className="mb-12 text-center">
         <h1 className="text-4xl font-bold mb-2 tracking-tight">
-          🏆 2026 世界杯冠军预测
+          🏆 2026 世界杯基础实力预测
         </h1>
         <p className="text-[var(--color-text-muted)] text-lg">
-          智能分析驱动 · 多维数据决策 · 蒙特卡洛模拟验证
+          基础实力基线（不含事件） · ELO 与泊松模型 · 蒙特卡洛统计
         </p>
       </header>
 
       {/* Champion Hero */}
       <section className="mb-12">
-        <ChampionHero simulation={simulation} teams={teams} />
+        <ChampionHero simulation={simulation} />
       </section>
 
       {/* Probability Bars */}
       <section className="mb-12">
         <h2 className="text-2xl font-semibold mb-6">夺冠概率前十名</h2>
-        <ProbabilityBar simulation={simulation} teams={teams} />
+        <ProbabilityBar simulation={simulation} />
       </section>
 
       {/* Quick Navigation */}

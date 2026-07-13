@@ -1,5 +1,17 @@
 const BASE_URL = "/api/v1";
 
+export interface SimulationParams {
+  event_ids?: number[] | string;
+  baseline_simulation_id?: string;
+  iterations?: number;
+  seed?: number;
+  refresh?: boolean;
+}
+
+export const simulationQueryKeys = {
+  baseline: ["simulation", "baseline"] as const,
+};
+
 async function throwAPIError(res: Response): Promise<never> {
   let detail = "";
   try {
@@ -54,11 +66,22 @@ export const api = {
     fetchJSON<import("../types").BracketResponse>("/bracket"),
   getBracketTeamPath: (teamId: number) =>
     fetchJSON<import("../types").TeamBracketPath>(`/bracket/team/${teamId}`),
-  getSimulation: (params?: { event_ids?: string; refresh?: boolean }) => {
+  getSimulation: (params?: SimulationParams) => {
     const p = new URLSearchParams();
-    if (params?.event_ids) p.set("event_ids", params.event_ids);
+    if (params?.event_ids) {
+      const eventIds = Array.isArray(params.event_ids)
+        ? params.event_ids.join(",")
+        : params.event_ids;
+      if (eventIds) p.set("event_ids", eventIds);
+    }
+    if (params?.baseline_simulation_id) {
+      p.set("baseline_simulation_id", params.baseline_simulation_id);
+    }
+    if (params?.iterations != null) p.set("iterations", String(params.iterations));
+    if (params?.seed != null) p.set("seed", String(params.seed));
     if (params?.refresh) p.set("refresh", "true");
-    return fetchJSON<import("../types").SimulationResult>(`/bracket/simulation?${p}`);
+    const suffix = p.size ? `?${p}` : "";
+    return fetchJSON<import("../types").SimulationResult>(`/bracket/simulation${suffix}`);
   },
 
   // Events

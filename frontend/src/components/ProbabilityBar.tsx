@@ -3,11 +3,20 @@ import type { Team, SimulationResult } from "../types";
 
 interface Props {
   simulation: SimulationResult | undefined;
-  teams: Team[] | undefined;
 }
 
-export default function ProbabilityBar({ simulation, teams }: Props) {
-  if (!simulation?.champion_probs || !teams) {
+interface ProbabilityRow {
+  team: Team;
+  probability: number;
+}
+
+function displayTeamName(team: Team): string {
+  return team.name_cn || team.name || team.fifa_code;
+}
+
+export default function ProbabilityBar({ simulation }: Props) {
+  const summary = simulation?.summary;
+  if (!summary) {
     return (
       <div className="bg-[var(--color-surface)] rounded-xl p-8 text-center">
         <p className="text-[var(--color-text-muted)]">
@@ -17,22 +26,55 @@ export default function ProbabilityBar({ simulation, teams }: Props) {
     );
   }
 
-  const sorted = Object.entries(simulation.champion_probs)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 10);
+  const knownTeams = new Map<number, Team>();
+  for (const advancement of Object.values(summary.advancement_probs ?? {})) {
+    if (advancement?.team) knownTeams.set(advancement.team.id, advancement.team);
+  }
+  for (const entry of summary.top3 ?? []) {
+    if (entry?.team) knownTeams.set(entry.team.id, entry.team);
+  }
+  if (summary.probability_leader?.team) {
+    knownTeams.set(summary.probability_leader.team.id, summary.probability_leader.team);
+  }
+
+  const rows: ProbabilityRow[] = Object.entries(
+    summary.champion_probs_by_team_id ?? {},
+  )
+    .map(([teamId, probability]) => ({
+      team: knownTeams.get(Number(teamId)),
+      probability,
+    }))
+    .filter((row): row is ProbabilityRow => (
+      row.team != null && Number.isFinite(row.probability)
+    ))
+    .sort((a, b) => b.probability - a.probability || a.team.id - b.team.id);
+
+  const leader = summary.probability_leader;
+  const leaderRow = leader?.team && Number.isFinite(leader.probability)
+    ? { team: leader.team, probability: leader.probability }
+    : undefined;
+  const sorted = leaderRow
+    ? [leaderRow, ...rows.filter((row) => row.team.id !== leaderRow.team.id)].slice(0, 10)
+    : rows.slice(0, 10);
+
+  if (sorted.length === 0) {
+    return (
+      <div className="bg-[var(--color-surface)] rounded-xl p-8 text-center">
+        <p className="text-[var(--color-text-muted)]">暂无可用的夺冠概率数据</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
-      {sorted.map(([name, prob], i) => {
-        const team = teams.find(
-          (t) => t.name === name || t.name_cn === name
-        );
-        const displayName = team?.name_cn ?? name;
-        const pct = (prob * 100).toFixed(1);
+      {sorted.map(({ team, probability }, i) => {
+        const displayName = displayTeamName(team);
+        const normalizedProbability = Math.min(Math.max(probability, 0), 1);
+        const pct = (normalizedProbability * 100).toFixed(1);
 
         return (
           <motion.div
-            key={name}
+            key={team.id}
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: i * 0.05 }}

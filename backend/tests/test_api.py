@@ -47,8 +47,10 @@ async def db_session():
 def reset_prediction_breaker():
     """每个测试前重置预测路由的全局熔断器。"""
     from app.routers.predictions import _get_prediction_service
+    from app.services.simulation_cache import get_simulation_cache
 
     _get_prediction_service().breaker.reset()
+    get_simulation_cache().clear()
 
 
 @pytest_asyncio.fixture
@@ -114,11 +116,27 @@ class TestEventsEndpoint:
         event_id = created.json()["id"]
 
         after_create = await client.get("/api/v1/bracket/simulation?iterations=100")
-        assert after_create.json()["simulation_id"] != initial_id
+        assert after_create.json()["simulation_id"] == initial_id
+
+        first_scenario = await client.get(
+            f"/api/v1/bracket/simulation?iterations=100&event_ids={event_id}"
+            f"&baseline_simulation_id={initial_id}"
+        )
+        first_scenario_id = first_scenario.json()["simulation_id"]
 
         updated = await client.put(f"/api/v1/events/{event_id}", json={"active": False})
         assert updated.status_code == 200
         assert updated.json()["active"] is False
+
+        second_scenario = await client.get(
+            f"/api/v1/bracket/simulation?iterations=100&event_ids={event_id}"
+            f"&baseline_simulation_id={initial_id}"
+        )
+        assert second_scenario.json()["simulation_id"] != first_scenario_id
+        assert second_scenario.json()["ignored_events"] == [
+            {"event_id": event_id, "reason": "inactive"}
+        ]
+        assert second_scenario.json()["baseline_simulation_id"] == initial_id
 
         deleted = await client.delete(f"/api/v1/events/{event_id}")
         assert deleted.status_code == 200
@@ -231,6 +249,11 @@ class TestBracketEndpoint:
         assert first.status_code == 200
         body = first.json()
         assert body["simulation_id"]
+        assert body["baseline_simulation_id"] == body["simulation_id"]
+        assert body["scenario"]["type"] == "BASELINE"
+        assert body["summary"]["probability_leader"] == body["probability_leader"]
+        assert body["model"]["seed"] == body["seed"]
+        assert body["tournament"]["data_version"] == "user-scenario-20260713-v1"
         assert body["seed"] > 0
         assert body["event_ids"] == []
         assert {stage: len(body["stages"][stage]["matches"]) for stage in ("R32", "R16", "QF", "SF", "FINAL")} == {
@@ -270,6 +293,7 @@ class TestBracketEndpoint:
 
         refreshed = await client.get("/api/v1/bracket/simulation?iterations=100&refresh=true")
         assert refreshed.json()["simulation_id"] != body["simulation_id"]
+        assert refreshed.json()["seed"] != body["seed"]
 
     async def test_simulation_returns_event_application_audit(self, client):
         teams = (await client.get("/api/v1/teams")).json()
@@ -288,6 +312,9 @@ class TestBracketEndpoint:
         )
         assert response.status_code == 200
         body = response.json()
+        assert body["scenario"]["type"] == "EVENT"
+        assert body["baseline_simulation_id"] != body["simulation_id"]
+        assert body["model"]["seed"] == body["seed"]
         assert body["requested_event_ids"] == [event_id, 999999]
         assert body["event_ids"] == [event_id, 999999]
         assert body["team_impacts"]["ARG"] == {
@@ -320,3 +347,39 @@ class TestBracketEndpoint:
             for stage in first_body["stages"].values()
             for match in stage["matches"]
         )
+
+    async def test_event_scenario_reuses_explicit_baseline(self, client):
+        baseline = await client.get(
+            "/api/v1/bracket/simulation?iterations=100&seed=12345"
+        )
+        baseline_body = baseline.json()
+        teams = (await client.get("/api/v1/teams")).json()
+        argentina = next(team for team in teams if team["fifa_code"] == "ARG")
+        event = await client.post("/api/v1/events", json={
+            "team_id": argentina["id"],
+            "type": "INJURY",
+            "title": "基线关联测试",
+            "severity": "MINOR",
+            "impact": {"attack_lambda_delta": -0.05},
+        })
+        event_id = event.json()["id"]
+
+        scenario = await client.get(
+            f"/api/v1/bracket/simulation?iterations=100&event_ids={event_id}"
+            f"&baseline_simulation_id={baseline_body['simulation_id']}"
+        )
+        scenario_body = scenario.json()
+
+        assert scenario.status_code == 200
+        assert scenario_body["baseline_simulation_id"] == baseline_body["simulation_id"]
+        assert scenario_body["model"]["seed"] == baseline_body["model"]["seed"]
+        assert scenario_body["scenario"]["type"] == "EVENT"
+
+    async def test_event_scenario_rejects_unknown_baseline(self, client):
+        response = await client.get(
+            "/api/v1/bracket/simulation?iterations=100&event_ids=999999"
+            "&baseline_simulation_id=missing-baseline"
+        )
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "基线模拟不存在或已过期"

@@ -15,7 +15,6 @@ from sqlalchemy.orm import selectinload
 from app.models.database import get_db
 from app.models.event import Event
 from app.models.team import Team
-from app.services.monte_carlo import get_engine
 from app.services.event_sources import FileEventSource
 from app.services.scenario_resolver import (
     ATTACK_LAMBDA_DELTA,
@@ -25,6 +24,7 @@ from app.services.scenario_resolver import (
     EventImpactError,
     normalize_impact_for_storage,
 )
+from app.services.simulation_cache import get_simulation_cache
 
 logger = logging.getLogger(__name__)
 
@@ -125,8 +125,8 @@ async def create_event(req: EventCreate, db: AsyncSession = Depends(get_db)):
     )
     db.add(event)
     await db.commit()
-    get_engine().invalidate_cache()
     await db.refresh(event)
+    get_simulation_cache().invalidate_scenarios({event.id})
     result = await db.execute(
         select(Event).options(selectinload(Event.team)).where(Event.id == event.id)
     )
@@ -162,7 +162,7 @@ async def update_event(event_id: int, req: EventUpdate, db: AsyncSession = Depen
     if effective_at and expires_at and expires_at <= effective_at:
         raise HTTPException(status_code=400, detail="失效时间必须晚于生效时间")
     await db.commit()
-    get_engine().invalidate_cache()
+    get_simulation_cache().invalidate_scenarios({event_id})
     result = await db.execute(
         select(Event).options(selectinload(Event.team)).where(Event.id == event_id)
     )
@@ -176,7 +176,7 @@ async def delete_event(event_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="事件不存在")
     await db.delete(event)
     await db.commit()
-    get_engine().invalidate_cache()
+    get_simulation_cache().invalidate_scenarios({event_id})
     return {"deleted": True}
 
 
@@ -292,7 +292,7 @@ async def import_events(
 
     await db.commit()
     if created or updated:
-        get_engine().invalidate_cache()
+        get_simulation_cache().invalidate_scenarios()
     return {
         "filename": file.filename,
         "total": len(records),

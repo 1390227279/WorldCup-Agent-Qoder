@@ -1,5 +1,7 @@
 """Resolve selected events into bounded, auditable scenario modifiers."""
 
+import hashlib
+import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from numbers import Real
@@ -76,6 +78,9 @@ class ScenarioResolution:
     applied_events: list[AppliedScenarioEvent] = field(default_factory=list)
     ignored_events: list[IgnoredScenarioEvent] = field(default_factory=list)
     team_event_ids: dict[str, list[int]] = field(default_factory=dict)
+    event_content_fingerprint: str = field(
+        default_factory=lambda: hashlib.sha256(b"[]").hexdigest()
+    )
 
     @property
     def applied_event_ids(self) -> list[int]:
@@ -88,6 +93,7 @@ class ScenarioResolution:
             "ignored_events": [event.to_dict() for event in self.ignored_events],
             "team_impacts": self.team_impacts,
             "team_event_ids": self.team_event_ids,
+            "event_content_fingerprint": self.event_content_fingerprint,
         }
 
 
@@ -123,9 +129,7 @@ def _resolve_alias(
         canonical_value = _numeric_delta(impact[canonical_key], canonical_key)
         legacy_value = _numeric_delta(impact[legacy_key], legacy_key)
         if canonical_value != legacy_value:
-            raise EventImpactError(
-                f"{canonical_key} 与兼容字段 {legacy_key} 的值冲突"
-            )
+            raise EventImpactError(f"{canonical_key} 与兼容字段 {legacy_key} 的值冲突")
         return canonical_value
     if canonical_present:
         return _numeric_delta(impact[canonical_key], canonical_key)
@@ -162,7 +166,8 @@ def normalize_impact_for_storage(
     normalized = {
         key: value
         for key, value in impact.items()
-        if key not in {
+        if key
+        not in {
             ATTACK_LAMBDA_DELTA,
             CONCEDE_LAMBDA_DELTA,
             LEGACY_ATTACK_KEY,
@@ -223,6 +228,44 @@ async def resolve_scenario_events(
     )
     events_by_id = {event.id: event for event in event_rows.scalars().all()}
     current_time = now or datetime.utcnow()
+    fingerprint_payload = []
+    for event_id in requested_ids:
+        event = events_by_id.get(event_id)
+        if event is None:
+            fingerprint_payload.append({"event_id": event_id, "missing": True})
+            continue
+        fingerprint_payload.append(
+            {
+                "event_id": event.id,
+                "team_id": event.team_id,
+                "type": event.type,
+                "title": event.title,
+                "severity": event.severity,
+                "active": event.active,
+                "impact": event.impact,
+                "source": event.source,
+                "source_type": event.source_type,
+                "source_url": event.source_url,
+                "external_id": event.external_id,
+                "effective_at": (
+                    event.effective_at.isoformat() if event.effective_at else None
+                ),
+                "expires_at": (
+                    event.expires_at.isoformat() if event.expires_at else None
+                ),
+                "updated_at": (
+                    event.updated_at.isoformat() if event.updated_at else None
+                ),
+            }
+        )
+    resolution.event_content_fingerprint = hashlib.sha256(
+        json.dumps(
+            fingerprint_payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
 
     totals: dict[str, LambdaImpact] = {}
     for event_id in requested_ids:
@@ -233,9 +276,7 @@ async def resolve_scenario_events(
             )
             continue
         if not event.active:
-            resolution.ignored_events.append(
-                IgnoredScenarioEvent(event_id, "inactive")
-            )
+            resolution.ignored_events.append(IgnoredScenarioEvent(event_id, "inactive"))
             continue
         if event.effective_at is not None and event.effective_at > current_time:
             resolution.ignored_events.append(
@@ -243,9 +284,7 @@ async def resolve_scenario_events(
             )
             continue
         if event.expires_at is not None and event.expires_at <= current_time:
-            resolution.ignored_events.append(
-                IgnoredScenarioEvent(event_id, "expired")
-            )
+            resolution.ignored_events.append(IgnoredScenarioEvent(event_id, "expired"))
             continue
 
         team_code = active_team_codes.get(event.team_id)
@@ -276,13 +315,15 @@ async def resolve_scenario_events(
                 previous.concede_lambda_delta + lambda_impact.concede_lambda_delta
             ),
         )
-        resolution.applied_events.append(AppliedScenarioEvent(
-            event_id=event.id,
-            team_id=event.team_id,
-            team_code=team_code,
-            title=event.title,
-            impact=lambda_impact,
-        ))
+        resolution.applied_events.append(
+            AppliedScenarioEvent(
+                event_id=event.id,
+                team_id=event.team_id,
+                team_code=team_code,
+                title=event.title,
+                impact=lambda_impact,
+            )
+        )
         resolution.team_event_ids.setdefault(team_code, []).append(event.id)
 
     resolution.team_impacts = {

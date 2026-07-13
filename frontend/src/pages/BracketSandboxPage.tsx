@@ -1,28 +1,21 @@
 import { useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import BracketTree from "../components/BracketTree";
 import ScenarioSlider from "../components/ScenarioSlider";
 import AIPunditPanel from "../components/AIPunditPanel";
-import { useBracket } from "../hooks/useBracket";
 import { usePredictions } from "../hooks/usePredictions";
-import { fetchJSON } from "../services/api";
-import type { Match, AgentPrediction, SimulationResult, Team } from "../types";
+import { api } from "../services/api";
+import type { Match, AgentPrediction, SimulationResult } from "../types";
 
 export default function BracketSandboxPage() {
   const [selectedEventIds, setSelectedEventIds] = useState<number[]>([]);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const [selectedPrediction, setSelectedPrediction] = useState<AgentPrediction | null>(null);
-
-  const {
-    data: bracket,
-    isLoading,
-    isFetching,
-    error,
-    refetch,
-  } = useBracket();
+  const [isRefreshingSimulation, setIsRefreshingSimulation] = useState(false);
+  const queryClient = useQueryClient();
 
   const {
     mutate: predictMatch,
@@ -31,21 +24,42 @@ export default function BracketSandboxPage() {
     error: predictError,
   } = usePredictions();
 
-  const { data: simulation } = useQuery<SimulationResult>({
-    queryKey: ["simulation", selectedEventIds],
-    queryFn: () => {
-      const p = new URLSearchParams();
-      if (selectedEventIds.length) p.set("event_ids", selectedEventIds.join(","));
-      p.set("refresh", "true");
-      return fetchJSON<SimulationResult>(`/bracket/simulation?${p}`);
-    },
-  });
-
-  const { data: teams } = useQuery<Team[]>({
-    queryKey: ["teams"],
-    queryFn: () => fetchJSON<Team[]>("/teams"),
+  const eventKey = selectedEventIds.join(",");
+  const simulationQueryKey = ["simulation", eventKey] as const;
+  const {
+    data: simulation,
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } = useQuery<SimulationResult>({
+    queryKey: simulationQueryKey,
+    queryFn: () => api.getSimulation({ event_ids: eventKey || undefined }),
     staleTime: 5 * 60 * 1000,
   });
+
+  const applyEventSelection = async (eventIds: number[]) => {
+    const nextEventKey = eventIds.join(",");
+    const refreshed = await api.getSimulation({
+      event_ids: nextEventKey || undefined,
+      refresh: true,
+    });
+    queryClient.setQueryData(["simulation", nextEventKey], refreshed);
+    setSelectedEventIds(eventIds);
+  };
+
+  const refreshSimulation = async () => {
+    setIsRefreshingSimulation(true);
+    try {
+      const refreshed = await api.getSimulation({
+        event_ids: eventKey || undefined,
+        refresh: true,
+      });
+      queryClient.setQueryData(simulationQueryKey, refreshed);
+    } finally {
+      setIsRefreshingSimulation(false);
+    }
+  };
 
   const handleMatchClick = useCallback(
     (match: Match, prediction: AgentPrediction | null) => {
@@ -79,9 +93,9 @@ export default function BracketSandboxPage() {
         predicted_score: p.predicted_score,
         confidence: p.confidence,
         key_factors: p.key_factors,
-        reasoning_chain: p.reasoning_chain.map((r) => ({
-          step: r.step ?? 0,
-          tool: r.tool,
+        reasoning_chain: p.reasoning_chain.map((r, index) => ({
+          step_number: r.step_number > 0 ? r.step_number : index + 1,
+          tool_used: r.tool_used,
           finding: r.finding,
           analysis: r.analysis,
         })),
@@ -103,13 +117,23 @@ export default function BracketSandboxPage() {
       </Link>
 
       <header className="mb-3">
-        <h1 className="text-2xl font-bold mb-1">🏟️ 淘汰赛推演</h1>
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="text-2xl font-bold mb-1">🏟️ 淘汰赛推演</h1>
+          <button
+            onClick={refreshSimulation}
+            disabled={isRefreshingSimulation}
+            className="text-xs px-3 py-2 rounded-lg bg-[var(--color-primary)] text-white disabled:opacity-50"
+          >
+            {isRefreshingSimulation ? "重新模拟中…" : "重新模拟"}
+          </button>
+        </div>
         <p className="text-[var(--color-text-muted)]">
-          交互式淘汰赛推演 · 五层对阵树 · 智能预测分析
+          {selectedEventIds.length > 0 ? "当前情景模拟" : "默认赛事模拟"}
+          {simulation?.simulation_id ? ` · 模拟编号 ${simulation.simulation_id.slice(0, 8)}` : ""}
         </p>
       </header>
 
-      <ScenarioSlider selectedEventIds={selectedEventIds} onChange={setSelectedEventIds} />
+      <ScenarioSlider selectedEventIds={selectedEventIds} onChange={applyEventSelection} />
 
       <div className="flex gap-4 items-start flex-col xl:flex-row">
         <div className="flex-1 min-w-0 bg-[var(--color-surface)] rounded-xl p-3 overflow-hidden relative">
@@ -151,9 +175,7 @@ export default function BracketSandboxPage() {
                 </div>
               )}
               <BracketTree
-                stages={bracket?.stages ?? null}
-                championProbs={simulation?.champion_probs}
-                teams={teams}
+                stages={simulation?.stages ?? null}
                 eventInfluenced={selectedEventIds.length > 0}
                 onMatchClick={handleMatchClick}
               />

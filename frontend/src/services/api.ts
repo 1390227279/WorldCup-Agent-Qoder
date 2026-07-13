@@ -62,7 +62,13 @@ export const api = {
   },
 
   // Events
-  getEvents: () => fetchJSON<import("../types").Event[]>("/events"),
+  getEvents: (params?: { active_only?: boolean; current_only?: boolean }) => {
+    const search = new URLSearchParams();
+    if (params?.active_only) search.set("active_only", "true");
+    if (params?.current_only) search.set("current_only", "true");
+    const suffix = search.size ? `?${search}` : "";
+    return fetchJSON<import("../types").Event[]>(`/events${suffix}`);
+  },
   createEvent: (data: import("../types").EventCreate) =>
     postJSON<import("../types").Event>("/events", data),
   updateEvent: (id: number, data: import("../types").EventUpdate) =>
@@ -70,6 +76,14 @@ export const api = {
   deleteEvent: (id: number) =>
     deleteJSON<{ deleted: boolean }>(`/events/${id}`),
   getEventTypes: () => fetchJSON<{ types: Record<string,string>; severities: Record<string,string> }>("/events/types"),
+  importEvents: async (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${BASE_URL}/events/import`, { method: "POST", body: form });
+    if (!res.ok) return throwAPIError(res);
+    return res.json() as Promise<import("../types").EventImportResult>;
+  },
+  eventImportTemplateUrl: `${BASE_URL}/events/import/template`,
 };
 
 async function putJSON<T>(url: string, body?: unknown): Promise<T> {

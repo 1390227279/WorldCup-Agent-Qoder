@@ -79,12 +79,15 @@ class TestHealthEndpoint:
 
 class TestTeamsEndpoint:
     async def test_teams_returns_48(self, client):
-        """GET /api/v1/teams 应返回 48 支球队。"""
+        """GET /api/v1/teams 应只返回当前赛事的 48 支活跃球队。"""
         resp = await client.get("/api/v1/teams")
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
         assert len(data) == 48
+        assert len({team["fifa_code"] for team in data}) == 48
+        assert {team["tournament_status"] for team in data} == {"SCENARIO"}
+        assert {team["qualification_status"] for team in data} == {"SCENARIO"}
 
 
 class TestEventsEndpoint:

@@ -5,16 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.team import Team
 from app.models.event import Event
-from app.models.tournament import (
-    DEFAULT_TOURNAMENT_CODE,
-    DEFAULT_TOURNAMENT_DATA_VERSION,
-    DEFAULT_TOURNAMENT_NAME,
-    DEFAULT_TOURNAMENT_NAME_CN,
-    DEFAULT_TOURNAMENT_RULES_VERSION,
-    DEFAULT_TOURNAMENT_STATUS,
-    Tournament,
-    TournamentTeam,
-)
+from app.services.tournament_data import sync_tournament_dataset
 
 TEAMS_SEED = [
     # ── Group A ──
@@ -245,54 +236,34 @@ EVENTS_SEED = [
 
 
 async def seed_all(session: AsyncSession):
-    """Load seed data if database is empty (idempotent)."""
+    """Load legacy base data and synchronize the versioned tournament dataset."""
     result = await session.execute(select(Team).limit(1))
-    if result.scalars().first():
-        return  # already seeded
+    seeded_legacy_data = result.scalars().first() is None
 
-    tournament_result = await session.execute(
-        select(Tournament).where(Tournament.code == DEFAULT_TOURNAMENT_CODE)
-    )
-    tournament = tournament_result.scalar_one_or_none()
-    if tournament is None:
-        tournament = Tournament(
-            code=DEFAULT_TOURNAMENT_CODE,
-            name=DEFAULT_TOURNAMENT_NAME,
-            name_cn=DEFAULT_TOURNAMENT_NAME_CN,
-            year=2026,
-            status=DEFAULT_TOURNAMENT_STATUS,
-            data_version=DEFAULT_TOURNAMENT_DATA_VERSION,
-            rules_version=DEFAULT_TOURNAMENT_RULES_VERSION,
-        )
-        session.add(tournament)
+    if seeded_legacy_data:
+        team_map: dict[str, Team] = {}
+        for data in TEAMS_SEED:
+            team = Team(**data)
+            session.add(team)
+            team_map[data["fifa_code"]] = team
+
         await session.flush()
 
-    team_map: dict[str, Team] = {}
-    for data in TEAMS_SEED:
-        team = Team(**data)
-        session.add(team)
-        team_map[data["fifa_code"]] = team
+        for data in EVENTS_SEED:
+            code = data["fifa_code"]
+            team = team_map.get(code)
+            if team:
+                event_data = {k: v for k, v in data.items() if k != "fifa_code"}
+                event = Event(team_id=team.id, **event_data)
+                session.add(event)
 
-    await session.flush()
-
-    for data in TEAMS_SEED:
-        team = team_map[data["fifa_code"]]
-        session.add(TournamentTeam(
-            tournament_id=tournament.id,
-            team_id=team.id,
-            group_name=data.get("group_name"),
-            pot=data.get("pot"),
-            qualification_status="LEGACY",
-            active=True,
-        ))
-
-    for data in EVENTS_SEED:
-        code = data["fifa_code"]
-        team = team_map.get(code)
-        if team:
-            event_data = {k: v for k, v in data.items() if k != "fifa_code"}
-            event = Event(team_id=team.id, **event_data)
-            session.add(event)
+    sync_result = await sync_tournament_dataset(session)
 
     await session.commit()
-    print(f"✅ Seeded {len(TEAMS_SEED)} teams and {len(EVENTS_SEED)} events")
+    if seeded_legacy_data:
+        print(f"✅ Seeded {len(TEAMS_SEED)} base teams and {len(EVENTS_SEED)} events")
+    print(
+        "✅ Synchronized tournament dataset: "
+        f"{sync_result.active_participants} active participants, "
+        f"{sync_result.teams_created} teams created"
+    )

@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 from app.models.database import get_db
 from app.models.match import Match
 from app.models.team import Team
+from app.models.tournament import DEFAULT_TOURNAMENT_CODE, Tournament, TournamentTeam
 from app.services.monte_carlo import get_engine
 
 logger = logging.getLogger(__name__)
@@ -193,10 +194,19 @@ async def get_simulation_results(
     db: AsyncSession = Depends(get_db),
 ):
     """运行 Monte Carlo 模拟，返回夺冠概率。"""
-    # 1. 获取所有球队
-    teams_result = await db.execute(select(Team))
-    teams = teams_result.scalars().all()
-    if not teams:
+    # 1. 获取当前赛事的活跃参赛球队
+    teams_result = await db.execute(
+        select(Team, TournamentTeam)
+        .join(TournamentTeam, TournamentTeam.team_id == Team.id)
+        .join(Tournament, Tournament.id == TournamentTeam.tournament_id)
+        .where(
+            Tournament.code == DEFAULT_TOURNAMENT_CODE,
+            TournamentTeam.active.is_(True),
+        )
+        .order_by(TournamentTeam.group_name, TournamentTeam.pot)
+    )
+    tournament_teams = teams_result.all()
+    if not tournament_teams:
         return {"error": "No teams available"}
 
     # 2. 处理事件影响
@@ -225,7 +235,7 @@ async def get_simulation_results(
 
     # 3. 构建球队数据
     teams_data = []
-    for t in teams:
+    for t, participant in tournament_teams:
         teams_data.append({
             "id": t.id,
             "name": t.name,
@@ -234,8 +244,8 @@ async def get_simulation_results(
             "confederation": t.confederation,
             "fifa_ranking": t.fifa_ranking,
             "elo_rating": t.elo_rating,
-            "group_name": t.group_name,
-            "pot": t.pot,
+            "group_name": participant.group_name,
+            "pot": participant.pot,
             "stats": t.stats,
         })
 

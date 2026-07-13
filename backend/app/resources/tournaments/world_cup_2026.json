@@ -1,0 +1,517 @@
+{
+  "schema_version": 1,
+  "tournament": {
+    "code": "world-cup-2026",
+    "name": "FIFA World Cup 2026 Scenario",
+    "name_cn": "2026 世界杯情景阵容",
+    "year": 2026,
+    "status": "SCENARIO",
+    "data_version": "user-scenario-20260713-v1",
+    "rules_version": "pending-v1",
+    "dataset_kind": "SCENARIO",
+    "is_official": false,
+    "source_name": "User-provided manual mock data",
+    "source_url": "manual_mock_data",
+    "notes": "This is a user-provided scenario roster, not an official FIFA participant list."
+  },
+  "team_defaults": [
+    {
+      "fifa_code": "BFA",
+      "confederation": "CAF",
+      "fifa_ranking": null,
+      "elo_rating": 1500,
+      "stats": {
+        "data_quality": "scenario_default"
+      }
+    },
+    {
+      "fifa_code": "CIV",
+      "confederation": "CAF",
+      "fifa_ranking": null,
+      "elo_rating": 1500,
+      "stats": {
+        "data_quality": "scenario_default"
+      }
+    },
+    {
+      "fifa_code": "IRQ",
+      "confederation": "AFC",
+      "fifa_ranking": null,
+      "elo_rating": 1500,
+      "stats": {
+        "data_quality": "scenario_default"
+      }
+    },
+    {
+      "fifa_code": "OMA",
+      "confederation": "AFC",
+      "fifa_ranking": null,
+      "elo_rating": 1500,
+      "stats": {
+        "data_quality": "scenario_default"
+      }
+    },
+    {
+      "fifa_code": "PAN",
+      "confederation": "CONCACAF",
+      "fifa_ranking": null,
+      "elo_rating": 1500,
+      "stats": {
+        "data_quality": "scenario_default"
+      }
+    },
+    {
+      "fifa_code": "UAE",
+      "confederation": "AFC",
+      "fifa_ranking": null,
+      "elo_rating": 1500,
+      "stats": {
+        "data_quality": "scenario_default"
+      }
+    },
+    {
+      "fifa_code": "UZB",
+      "confederation": "AFC",
+      "fifa_ranking": null,
+      "elo_rating": 1500,
+      "stats": {
+        "data_quality": "scenario_default"
+      }
+    }
+  ],
+  "participants": [
+    {
+      "fifa_code": "ARG",
+      "name": "Argentina",
+      "name_cn": "阿根廷",
+      "group_name": "A",
+      "pot": 1,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "URU",
+      "name": "Uruguay",
+      "name_cn": "乌拉圭",
+      "group_name": "A",
+      "pot": 2,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "POL",
+      "name": "Poland",
+      "name_cn": "波兰",
+      "group_name": "A",
+      "pot": 3,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "CHN",
+      "name": "China PR",
+      "name_cn": "中国",
+      "group_name": "A",
+      "pot": 4,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "BRA",
+      "name": "Brazil",
+      "name_cn": "巴西",
+      "group_name": "B",
+      "pot": 1,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "COL",
+      "name": "Colombia",
+      "name_cn": "哥伦比亚",
+      "group_name": "B",
+      "pot": 2,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "KOR",
+      "name": "Korea Republic",
+      "name_cn": "韩国",
+      "group_name": "B",
+      "pot": 3,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "NZL",
+      "name": "New Zealand",
+      "name_cn": "新西兰",
+      "group_name": "B",
+      "pot": 4,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "FRA",
+      "name": "France",
+      "name_cn": "法国",
+      "group_name": "C",
+      "pot": 1,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "CRO",
+      "name": "Croatia",
+      "name_cn": "克罗地亚",
+      "group_name": "C",
+      "pot": 2,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "EGY",
+      "name": "Egypt",
+      "name_cn": "埃及",
+      "group_name": "C",
+      "pot": 3,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "CAN",
+      "name": "Canada",
+      "name_cn": "加拿大",
+      "group_name": "C",
+      "pot": 4,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "ENG",
+      "name": "England",
+      "name_cn": "英格兰",
+      "group_name": "D",
+      "pot": 1,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "SUI",
+      "name": "Switzerland",
+      "name_cn": "瑞士",
+      "group_name": "D",
+      "pot": 2,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "CMR",
+      "name": "Cameroon",
+      "name_cn": "喀麦隆",
+      "group_name": "D",
+      "pot": 3,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "PAN",
+      "name": "Panama",
+      "name_cn": "巴拿马",
+      "group_name": "D",
+      "pot": 4,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "ESP",
+      "name": "Spain",
+      "name_cn": "西班牙",
+      "group_name": "E",
+      "pot": 1,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "SEN",
+      "name": "Senegal",
+      "name_cn": "塞内加尔",
+      "group_name": "E",
+      "pot": 2,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "GHA",
+      "name": "Ghana",
+      "name_cn": "加纳",
+      "group_name": "E",
+      "pot": 3,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "CRC",
+      "name": "Costa Rica",
+      "name_cn": "哥斯达黎加",
+      "group_name": "E",
+      "pot": 4,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "GER",
+      "name": "Germany",
+      "name_cn": "德国",
+      "group_name": "F",
+      "pot": 1,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "JPN",
+      "name": "Japan",
+      "name_cn": "日本",
+      "group_name": "F",
+      "pot": 2,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "CIV",
+      "name": "Côte d'Ivoire",
+      "name_cn": "科特迪瓦",
+      "group_name": "F",
+      "pot": 3,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "UAE",
+      "name": "United Arab Emirates",
+      "name_cn": "阿联酋",
+      "group_name": "F",
+      "pot": 4,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "BEL",
+      "name": "Belgium",
+      "name_cn": "比利时",
+      "group_name": "G",
+      "pot": 1,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "MAR",
+      "name": "Morocco",
+      "name_cn": "摩洛哥",
+      "group_name": "G",
+      "pot": 2,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "ALG",
+      "name": "Algeria",
+      "name_cn": "阿尔及利亚",
+      "group_name": "G",
+      "pot": 3,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "IRQ",
+      "name": "Iraq",
+      "name_cn": "伊拉克",
+      "group_name": "G",
+      "pot": 4,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "POR",
+      "name": "Portugal",
+      "name_cn": "葡萄牙",
+      "group_name": "H",
+      "pot": 1,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "PER",
+      "name": "Peru",
+      "name_cn": "秘鲁",
+      "group_name": "H",
+      "pot": 2,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "NGA",
+      "name": "Nigeria",
+      "name_cn": "尼日利亚",
+      "group_name": "H",
+      "pot": 3,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "OMA",
+      "name": "Oman",
+      "name_cn": "阿曼",
+      "group_name": "H",
+      "pot": 4,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "NED",
+      "name": "Netherlands",
+      "name_cn": "荷兰",
+      "group_name": "I",
+      "pot": 1,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "SWE",
+      "name": "Sweden",
+      "name_cn": "瑞典",
+      "group_name": "I",
+      "pot": 2,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "AUS",
+      "name": "Australia",
+      "name_cn": "澳大利亚",
+      "group_name": "I",
+      "pot": 3,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "UZB",
+      "name": "Uzbekistan",
+      "name_cn": "乌兹别克斯坦",
+      "group_name": "I",
+      "pot": 4,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "ITA",
+      "name": "Italy",
+      "name_cn": "意大利",
+      "group_name": "J",
+      "pot": 1,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "SRB",
+      "name": "Serbia",
+      "name_cn": "塞尔维亚",
+      "group_name": "J",
+      "pot": 2,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "IRN",
+      "name": "IR Iran",
+      "name_cn": "伊朗",
+      "group_name": "J",
+      "pot": 3,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "BFA",
+      "name": "Burkina Faso",
+      "name_cn": "布基纳法索",
+      "group_name": "J",
+      "pot": 4,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "USA",
+      "name": "USA",
+      "name_cn": "美国",
+      "group_name": "K",
+      "pot": 1,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "CHI",
+      "name": "Chile",
+      "name_cn": "智利",
+      "group_name": "K",
+      "pot": 2,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "KSA",
+      "name": "Saudi Arabia",
+      "name_cn": "沙特阿拉伯",
+      "group_name": "K",
+      "pot": 3,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "MLI",
+      "name": "Mali",
+      "name_cn": "马里",
+      "group_name": "K",
+      "pot": 4,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "MEX",
+      "name": "Mexico",
+      "name_cn": "墨西哥",
+      "group_name": "L",
+      "pot": 1,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "DEN",
+      "name": "Denmark",
+      "name_cn": "丹麦",
+      "group_name": "L",
+      "pot": 2,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "QAT",
+      "name": "Qatar",
+      "name_cn": "卡塔尔",
+      "group_name": "L",
+      "pot": 3,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    },
+    {
+      "fifa_code": "RSA",
+      "name": "South Africa",
+      "name_cn": "南非",
+      "group_name": "L",
+      "pot": 4,
+      "qualification_status": "SCENARIO",
+      "source_url": "manual_mock_data"
+    }
+  ]
+}
+

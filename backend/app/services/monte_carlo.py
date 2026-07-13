@@ -8,12 +8,17 @@ from typing import Optional
 
 import numpy as np
 
+from app.services.tournament_rules import (
+    BracketSlot,
+    GROUP_NAMES,
+    GroupStanding,
+    build_round_of_32_pairings,
+    rank_group,
+)
+
 ATTACK_FACTOR = 0.8
 DEFENSE_FACTOR = 0.6
 ELO_DIVISOR = 1000.0
-GROUP_NAMES = "ABCDEFGHIJKL"
-
-
 def _eg(attack_elo: float, defense_elo: float) -> float:
     atk = (attack_elo / ELO_DIVISOR) * ATTACK_FACTOR
     df = (defense_elo / ELO_DIVISOR) * DEFENSE_FACTOR
@@ -145,19 +150,27 @@ class MonteCarloEngine:
                     a[5] += hg; a[6] += ag; a[7] = a[5] - a[6]
                     b[5] += ag; b[6] += hg; b[7] = b[5] - b[6]
 
-        sk = lambda r: (r[4], r[7], r[5], r[3])  # pts, gd, gf, elo
-
-        group_winners, group_runners_up, group_thirds = [], [], []
+        group_rankings = {}
         for gn in GROUP_NAMES:
-            recs = sorted(groups[gn], key=sk, reverse=True)
-            group_winners.append(recs[0])
-            group_runners_up.append(recs[1])
-            group_thirds.append(recs[2])
+            group_rankings[gn] = rank_group(
+                GroupStanding(
+                    team_id=record[0],
+                    group_name=gn,
+                    points=record[4],
+                    goal_difference=record[7],
+                    goals_for=record[5],
+                    elo_rating=record[3],
+                    payload=record,
+                )
+                for record in groups[gn]
+            )
 
-        best_thirds = sorted(group_thirds, key=sk, reverse=True)[:8]
-
-        current = group_winners + group_runners_up + best_thirds
-        rng.shuffle(current)
+        round_of_32 = build_round_of_32_pairings(group_rankings)
+        current = [
+            slot
+            for pairing in round_of_32
+            for slot in (pairing.home, pairing.away)
+        ]
 
         stages: dict[str, dict] = {}
         stage_names = ["R32", "R16", "QF", "SF"]
@@ -170,9 +183,10 @@ class MonteCarloEngine:
             winners = []
             stage_matches = []
             for k in range(0, len(current), 2):
-                a, b = current[k], current[k + 1]
+                a_slot, b_slot = current[k], current[k + 1]
                 if rng.random() < 0.5:
-                    a, b = b, a
+                    a_slot, b_slot = b_slot, a_slot
+                a, b = a_slot.payload, b_slot.payload
                 lambda_home = _eg(a[3], b[3])
                 lambda_away = _eg(b[3], a[3])
                 if team_impacts:
@@ -192,11 +206,18 @@ class MonteCarloEngine:
                     winner = b
                 else:
                     winner = a if a[3] >= b[3] else b
-                winners.append(winner)
+                match_index = len(winners)
+                match_key = f"{stage_name}-{match_index + 1}"
+                winners.append(BracketSlot(
+                    team_id=winner[0],
+                    payload=winner,
+                    source_slot=match_key,
+                ))
                 if capture_path and team_by_id is not None:
                     stage_matches.append(self._path_match(
                         stage_name, len(stage_matches), a, b, hg, ag,
                         winner, team_by_id, stage_labels[stage_name],
+                        [a_slot.source_slot, b_slot.source_slot],
                     ))
             current = winners
             if capture_path:
@@ -205,9 +226,10 @@ class MonteCarloEngine:
                     "matches": stage_matches,
                 }
 
-        a, b = current[0], current[1]
+        a_slot, b_slot = current[0], current[1]
         if rng.random() < 0.5:
-            a, b = b, a
+            a_slot, b_slot = b_slot, a_slot
+        a, b = a_slot.payload, b_slot.payload
         lambda_home = _eg(a[3], b[3])
         lambda_away = _eg(b[3], a[3])
         if team_impacts:
@@ -234,6 +256,7 @@ class MonteCarloEngine:
                 "matches": [self._path_match(
                     "FINAL", 0, a, b, hg, ag, winner,
                     team_by_id, stage_labels["FINAL"],
+                    [a_slot.source_slot, b_slot.source_slot],
                 )],
             }
             return winner[1], stages
@@ -250,6 +273,7 @@ class MonteCarloEngine:
         winner,
         team_by_id: dict[int, dict],
         label: str,
+        source_slots: list[str],
     ) -> dict:
         stage_offsets = {"R32": 100, "R16": 200, "QF": 300, "SF": 400, "FINAL": 500}
         return {
@@ -263,6 +287,7 @@ class MonteCarloEngine:
             "away_score": away_score,
             "winner_team_id": winner[0],
             "winner": winner[1],
+            "source_slots": source_slots,
             "is_simulated": True,
             "match_order": match_index,
         }

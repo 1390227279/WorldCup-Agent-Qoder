@@ -244,6 +244,18 @@ class TestBracketEndpoint:
         assert all(match["home_team"]["id"] > 0 for match in all_matches)
         assert all(match["away_team"]["id"] > 0 for match in all_matches)
         assert all(match["winner_team_id"] > 0 for match in all_matches)
+        assert all(len(match["source_slots"]) == 2 for match in all_matches)
+        assert all(
+            source.startswith("GROUP_")
+            for match in body["stages"]["R32"]["matches"]
+            for source in match["source_slots"]
+        )
+        assert set(body["stages"]["R16"]["matches"][0]["source_slots"]) == {
+            "R32-1", "R32-2"
+        }
+        assert set(body["stages"]["FINAL"]["matches"][0]["source_slots"]) == {
+            "SF-1", "SF-2"
+        }
         assert body["stages"]["FINAL"]["matches"][0]["winner"] == body["predicted_champion"]
 
         cached = await client.get("/api/v1/bracket/simulation?iterations=100")

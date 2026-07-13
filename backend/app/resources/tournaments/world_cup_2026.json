@@ -7,12 +7,12 @@
     "year": 2026,
     "status": "SCENARIO",
     "data_version": "user-scenario-20260713-v1",
-    "rules_version": "pending-v1",
+    "rules_version": "scenario-fixed-v1",
     "dataset_kind": "SCENARIO",
     "is_official": false,
     "source_name": "User-provided manual mock data",
     "source_url": "manual_mock_data",
-    "notes": "This is a user-provided scenario roster, not an official FIFA participant list."
+    "notes": "This is a user-provided scenario roster, not an official FIFA participant list. It uses the product-defined scenario-fixed-v1 knockout mapping."
   },
   "team_defaults": [
     {
@@ -514,4 +514,3 @@
     }
   ]
 }
-

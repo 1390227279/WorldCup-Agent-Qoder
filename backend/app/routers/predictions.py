@@ -4,14 +4,15 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.database import get_db
-from app.models.team import Team
-from app.schema.prediction_schema import ValidatedPrediction
+from app.schema.prediction_schema import (
+    SimulatedMatchAnalysisRequest,
+    SimulatedMatchAnalysisResponse,
+)
 from app.services.prediction_service import PredictionService
+from app.services.simulation_cache import get_simulation_cache
 
 logger = logging.getLogger(__name__)
 
@@ -27,83 +28,37 @@ def _get_prediction_service() -> PredictionService:
     return _prediction_service
 
 
-class MatchPredictRequest(BaseModel):
-    home_team_id: int
-    away_team_id: int
-    home_team_code: Optional[str] = None
-    away_team_code: Optional[str] = None
-
-
-class MatchPredictionResponse(BaseModel):
-    model_config = {"protected_namespaces": ()}
-
-    home_team: str
-    away_team: str
-    is_valid: bool
-    is_agent: bool
-    model_used: str
-    errors: list[str]
-    warnings: list[str]
-    prediction: Optional[ValidatedPrediction]
-    circuit_breaker: dict
-
-
-async def _resolve_team(
-    db: AsyncSession,
-    team_id: int,
-    fifa_code: Optional[str],
-) -> Optional[Team]:
-    """Resolve a team by ID, falling back to its stable FIFA code.
-
-    Bracket data can remain cached in the browser while a development database
-    is recreated, which makes autoincrement IDs stale. FIFA codes are stable
-    across database rebuilds and let the request recover safely.
-    """
-    team = await db.get(Team, team_id)
-    if team or not fifa_code:
-        return team
-
-    result = await db.execute(
-        select(Team).where(Team.fifa_code == fifa_code.upper())
-    )
-    return result.scalar_one_or_none()
-
-
 @router.get("/champion")
 async def get_champion_prediction():
     return {"message": "Phase 4 implementation"}
 
 
-@router.post("/match", response_model=MatchPredictionResponse)
+@router.post("/match", response_model=SimulatedMatchAnalysisResponse)
 async def predict_match(
-    req: MatchPredictRequest,
+    req: SimulatedMatchAnalysisRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    home = await _resolve_team(db, req.home_team_id, req.home_team_code)
-    away = await _resolve_team(db, req.away_team_id, req.away_team_code)
-
-    if not home:
-        raise HTTPException(status_code=404, detail=f"未找到主队，球队编号：{req.home_team_id}")
-    if not away:
-        raise HTTPException(status_code=404, detail=f"未找到客队，球队编号：{req.away_team_id}")
-
-    result = await _get_prediction_service().predict_match(
-        home_team=home.name,
-        away_team=away.name,
-        db_session=db,
+    simulation = get_simulation_cache().get_by_id(req.simulation_id)
+    if simulation is None:
+        raise HTTPException(
+            status_code=404,
+            detail="模拟上下文不存在或已过期，请重新加载对阵图",
+        )
+    service = _get_prediction_service()
+    math_context = service.resolve_simulated_match(simulation, req.match_key)
+    if math_context is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"当前模拟中不存在比赛 {req.match_key}",
+        )
+    agent_analysis = await service.analyze_simulated_match(math_context, db)
+    return SimulatedMatchAnalysisResponse(
+        simulation_id=req.simulation_id,
+        match_key=req.match_key,
+        math=math_context,
+        agent=agent_analysis,
+        circuit_breaker=service.breaker.get_stats(),
     )
-
-    return {
-        "home_team": home.name,
-        "away_team": away.name,
-        "is_valid": result.is_valid,
-        "is_agent": result.is_agent,
-        "model_used": result.model_used,
-        "errors": result.errors,
-        "warnings": result.warnings,
-        "prediction": result.cleaned_data.model_dump() if result.cleaned_data else None,
-        "circuit_breaker": _get_prediction_service().breaker.get_stats(),
-    }
 
 
 @router.get("/match/{match_id}")

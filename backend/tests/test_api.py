@@ -200,39 +200,154 @@ class TestEventsEndpoint:
 
 class TestPredictionsEndpoint:
     async def test_predict_match_returns_result(self, client):
-        """POST /api/v1/predictions/match 应返回完整预测结果。"""
-        resp = await client.post(
-            "/api/v1/predictions/match",
-            json={"home_team_id": 1, "away_team_id": 2},
-        )
-        assert resp.status_code == 200
-        body = resp.json()
-        assert "home_team" in body
-        assert "away_team" in body
-        assert "is_valid" in body
-        assert "prediction" in body
-        assert "circuit_breaker" in body
-        assert body["prediction"]["predicted_score"]
-        assert all(
-            step["step_number"] > 0
-            for step in body["prediction"]["reasoning_chain"]
-        )
-
-    async def test_predict_match_falls_back_to_fifa_code(self, client):
-        """Stale bracket IDs can be recovered using stable FIFA codes."""
+        """单场分析必须从缓存模拟中解析权威数学上下文。"""
+        simulation = await client.get("/api/v1/bracket/simulation?iterations=100")
+        simulation_body = simulation.json()
+        match = simulation_body["representative_path"]["stages"]["R32"]["matches"][0]
         resp = await client.post(
             "/api/v1/predictions/match",
             json={
-                "home_team_id": 99991,
-                "away_team_id": 99992,
-                "home_team_code": "USA",
-                "away_team_code": "NED",
+                "simulation_id": simulation_body["simulation_id"],
+                "match_key": match["match_key"],
             },
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["home_team"] == "United States"
-        assert body["away_team"] == "Netherlands"
+        assert body["simulation_id"] == simulation_body["simulation_id"]
+        assert body["match_key"] == match["match_key"]
+        assert body["math"]["predicted_score"] == (
+            f'{match["home_score"]}-{match["away_score"]}'
+        )
+        assert body["math"]["winner_team_id"] == match["winner_team_id"]
+        assert body["math"]["home_lambda"] > 0
+        assert body["math"]["away_lambda"] > 0
+        probabilities = body["math"]["probabilities"]
+        assert probabilities["home_win"] + probabilities["draw"] + probabilities["away_win"] == pytest.approx(1.0, abs=0.001)
+        assert body["agent"]["status"] in {"available", "agent_unavailable"}
+
+    async def test_simulation_does_not_call_agent_until_match_click(
+        self,
+        client,
+        monkeypatch,
+    ):
+        from unittest.mock import AsyncMock
+
+        from app.routers.predictions import _get_prediction_service
+        from app.schema.prediction_schema import (
+            AgentReportValidationResult,
+            ReasoningStep,
+            ValidatedAgentReport,
+        )
+
+        service = _get_prediction_service()
+        analyze = AsyncMock(return_value=AgentReportValidationResult(
+            is_valid=True,
+            cleaned_data=ValidatedAgentReport(
+                key_factors=["数学结果与双方基础实力差距一致"],
+                risk_notes=["代表路径不是唯一可能结果"],
+                reasoning_chain=[ReasoningStep(
+                    step_number=1,
+                    finding="读取后端数学上下文",
+                    analysis="仅解释既有比分和胜者",
+                )],
+            ),
+        ))
+        monkeypatch.setattr(service.agent, "analyze_simulated_match", analyze)
+
+        simulation = await client.get("/api/v1/bracket/simulation?iterations=100")
+        assert analyze.await_count == 0
+        body = simulation.json()
+        match = body["representative_path"]["stages"]["R32"]["matches"][0]
+        response = await client.post(
+            "/api/v1/predictions/match",
+            json={
+                "simulation_id": body["simulation_id"],
+                "match_key": match["match_key"],
+            },
+        )
+        assert response.status_code == 200
+        assert analyze.await_count == 1
+        assert response.json()["agent"]["status"] == "available"
+        agent_context = analyze.await_args.args[0]
+        assert agent_context["simulation_id"] == body["simulation_id"]
+        assert agent_context["match_key"] == match["match_key"]
+        assert agent_context["predicted_score"] == f'{match["home_score"]}-{match["away_score"]}'
+        assert agent_context["winner_team_id"] == match["winner_team_id"]
+
+    async def test_predict_match_rejects_stale_context_and_unknown_match(self, client):
+        stale = await client.post(
+            "/api/v1/predictions/match",
+            json={"simulation_id": "expired", "match_key": "R32-1"},
+        )
+        assert stale.status_code == 404
+
+        simulation = await client.get("/api/v1/bracket/simulation?iterations=100")
+        unknown_match = await client.post(
+            "/api/v1/predictions/match",
+            json={
+                "simulation_id": simulation.json()["simulation_id"],
+                "match_key": "FINAL-999",
+            },
+        )
+        assert unknown_match.status_code == 404
+
+    async def test_agent_breaker_keeps_math_context_available(self, client):
+        from app.routers.predictions import _get_prediction_service
+
+        service = _get_prediction_service()
+        for _ in range(service.breaker._failure_threshold):
+            service.breaker.record_failure()
+        simulation = await client.get("/api/v1/bracket/simulation?iterations=100")
+        body = simulation.json()
+        match = body["representative_path"]["stages"]["FINAL"]["matches"][0]
+        response = await client.post(
+            "/api/v1/predictions/match",
+            json={
+                "simulation_id": body["simulation_id"],
+                "match_key": match["match_key"],
+            },
+        )
+        assert response.status_code == 200
+        result = response.json()
+        assert result["math"]["predicted_score"] == f'{match["home_score"]}-{match["away_score"]}'
+        assert result["agent"]["status"] == "agent_unavailable"
+
+    async def test_match_analysis_uses_events_from_selected_scenario(self, client):
+        baseline = await client.get("/api/v1/bracket/simulation?iterations=100")
+        baseline_body = baseline.json()
+        baseline_match = baseline_body["representative_path"]["stages"]["R32"]["matches"][0]
+        team = baseline_match["home_team"]
+        event = await client.post("/api/v1/events", json={
+            "team_id": team["id"],
+            "type": "TACTICAL",
+            "title": "单场上下文事件",
+            "severity": "MINOR",
+            "impact": {"attack_lambda_delta": -0.000001},
+        })
+        scenario = await client.get(
+            f'/api/v1/bracket/simulation?iterations=100&event_ids={event.json()["id"]}'
+            f'&baseline_simulation_id={baseline_body["simulation_id"]}'
+        )
+        scenario_body = scenario.json()
+        scenario_match = next(
+            match
+            for stage in scenario_body["representative_path"]["stages"].values()
+            for match in stage["matches"]
+            if team["id"] in {
+                match["home_team"]["id"],
+                match["away_team"]["id"],
+            }
+        )
+        response = await client.post("/api/v1/predictions/match", json={
+            "simulation_id": scenario_body["simulation_id"],
+            "match_key": scenario_match["match_key"],
+        })
+        assert response.status_code == 200
+        math_context = response.json()["math"]
+        assert math_context["scenario_type"] == "EVENT"
+        assert [item["title"] for item in math_context["applied_events"]] == [
+            "单场上下文事件"
+        ]
 
 
 class TestBracketEndpoint:

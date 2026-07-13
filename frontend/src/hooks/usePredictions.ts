@@ -1,13 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
-import type { Team } from '../types';
 
 export function usePredictions() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ homeTeam, awayTeam }: { homeTeam: Team; awayTeam: Team }) =>
-      api.predictMatch(homeTeam, awayTeam),
+    mutationFn: ({ simulationId, matchKey }: { simulationId: string; matchKey: string }) =>
+      api.predictMatch(simulationId, matchKey),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bracket'] });
     },

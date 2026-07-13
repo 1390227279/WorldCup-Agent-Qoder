@@ -1,338 +1,197 @@
-import { motion, AnimatePresence } from "framer-motion";
-import type { AgentPrediction, Team } from "../types";
-
-/* ================================================================
-   Helpers
-   ================================================================ */
-
-function confidenceColor(c: number): string {
-  if (c >= 0.7) return "#4ade80";
-  if (c >= 0.5) return "var(--color-gold)";
-  return "var(--color-accent)";
-}
-
-function confidenceLabel(c: number): string {
-  if (c >= 0.8) return "极高";
-  if (c >= 0.65) return "较高";
-  if (c >= 0.5) return "中等";
-  return "偏低";
-}
-
-/* ================================================================
-   Sub-components
-   ================================================================ */
+import { motion } from "framer-motion";
+import type {
+  Match,
+  MatchMathContext,
+  MatchPredictionResponse,
+  ReasoningStep,
+} from "../types";
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-2 mb-2 mt-5 first:mt-0">
+    <div className="mb-2 mt-5 flex items-center gap-2 first:mt-0">
       <span className="text-xs font-semibold uppercase tracking-widest text-[var(--color-text-muted)]">
         {children}
       </span>
-      <div className="flex-1 h-px bg-[var(--color-text-muted)] opacity-15" />
+      <div className="h-px flex-1 bg-[var(--color-text-muted)] opacity-15" />
     </div>
   );
 }
 
-/* ── Empty state ── */
+function teamName(team: Match["home_team"]): string {
+  return team?.name_cn || team?.name || "待定";
+}
+
+function winnerName(match: Match, math?: MatchMathContext): string {
+  const winnerTeamId = math?.winner_team_id ?? match.winner_team_id;
+  if (winnerTeamId === match.home_team?.id) return teamName(match.home_team);
+  if (winnerTeamId === match.away_team?.id) return teamName(match.away_team);
+  return math?.winner || match.winner || "待定";
+}
+
+function percentage(value: number): string {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function MathSummary({ match, math }: { match: Match; math?: MatchMathContext }) {
+  const score = math?.predicted_score
+    ?? (match.home_score != null && match.away_score != null
+      ? `${match.home_score}-${match.away_score}`
+      : "暂无比分");
+
+  return (
+    <div className="rounded-xl border border-[var(--color-primary)]/40 bg-[var(--color-bg)] p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold text-[var(--color-primary)]">数学模型结果</span>
+        <span className="text-[10px] text-[var(--color-text-muted)]">
+          后端模拟结果 · AI 不可修改
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <p className="text-xs text-[var(--color-text-muted)]">代表路径比分</p>
+          <p className="font-mono text-2xl font-bold text-[var(--color-accent)]">{score}</p>
+        </div>
+        <div>
+          <p className="text-xs text-[var(--color-text-muted)]">晋级球队</p>
+          <p className="text-lg font-bold">{winnerName(match, math)}</p>
+          <p className="text-[10px] text-[var(--color-text-muted)]">
+            {math?.decided_by === "PENALTIES" ? "点球决胜" : "常规时间"}
+          </p>
+        </div>
+      </div>
+
+      {math && (
+        <>
+          <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
+            <div className="rounded-lg bg-[var(--color-surface)] p-2">
+              <p className="text-[var(--color-text-muted)]">主胜</p>
+              <p className="mt-1 font-bold">{percentage(math.probabilities.home_win)}</p>
+            </div>
+            <div className="rounded-lg bg-[var(--color-surface)] p-2">
+              <p className="text-[var(--color-text-muted)]">平局</p>
+              <p className="mt-1 font-bold">{percentage(math.probabilities.draw)}</p>
+            </div>
+            <div className="rounded-lg bg-[var(--color-surface)] p-2">
+              <p className="text-[var(--color-text-muted)]">客胜</p>
+              <p className="mt-1 font-bold">{percentage(math.probabilities.away_win)}</p>
+            </div>
+          </div>
+          <div className="mt-3 flex justify-between text-xs text-[var(--color-text-muted)]">
+            <span>{teamName(math.home_team)} λ {math.home_lambda.toFixed(2)}</span>
+            <span>{teamName(math.away_team)} λ {math.away_lambda.toFixed(2)}</span>
+          </div>
+          {math.applied_events.length > 0 && (
+            <div className="mt-3 rounded-lg bg-[var(--color-gold)]/10 p-2 text-xs">
+              <p className="mb-1 font-semibold text-[var(--color-gold)]">本场已应用事件</p>
+              {math.applied_events.map((event) => (
+                <p key={event.event_id} className="text-[var(--color-text-muted)]">
+                  · {event.title}
+                </p>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function ReasoningChain({ chain }: { chain: ReasoningStep[] }) {
+  return (
+    <div className="space-y-3">
+      {chain.map((step, index) => (
+        <motion.div
+          key={`${step.step_number}-${index}`}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: index * 0.06 }}
+          className="border-l-2 border-[var(--color-primary)] pl-3"
+        >
+          <p className="text-xs font-bold text-[var(--color-primary)]">
+            步骤 {index + 1}
+          </p>
+          {step.finding && <p className="mt-1 text-sm">{step.finding}</p>}
+          {step.analysis && (
+            <p className="mt-1 text-xs leading-relaxed text-[var(--color-text-muted)]">
+              {step.analysis}
+            </p>
+          )}
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
-      <span className="text-4xl mb-3 opacity-40">🤖</span>
-      <p className="text-[var(--color-text-muted)] text-sm">暂无智能分析数据</p>
-      <p className="text-[var(--color-text-muted)] text-xs mt-1 opacity-60">
-        选择一场比赛后，将生成完整分析报告
+      <span className="mb-3 text-4xl opacity-40">🤖</span>
+      <p className="text-sm text-[var(--color-text-muted)]">暂无 AI 战术解读</p>
+      <p className="mt-1 text-xs text-[var(--color-text-muted)] opacity-60">
+        选择一场比赛后，先展示数学结果，再生成解释报告
       </p>
     </div>
   );
 }
-
-/* ── Degradation banner ── */
-function DegradationBanner() {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex items-center gap-2 rounded-lg px-3 py-2 mb-4 text-xs font-medium"
-      style={{
-        background: "rgba(245,197,24,0.1)",
-        border: "1px solid rgba(245,197,24,0.3)",
-        color: "var(--color-gold)",
-      }}
-    >
-      <span className="text-base">⚠️</span>
-      <span>智能分析暂时不可用，当前使用统计模型完成预测</span>
-    </motion.div>
-  );
-}
-
-/* ── Model badge ── */
-function ModelBadge({ isAgent }: { isAgent: boolean }) {
-  return (
-    <div
-      className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-mono"
-      style={{
-        background: isAgent ? "rgba(26,86,219,0.15)" : "rgba(245,197,24,0.12)",
-        color: isAgent ? "var(--color-primary)" : "var(--color-gold)",
-        border: `1px solid ${isAgent ? "rgba(26,86,219,0.3)" : "rgba(245,197,24,0.25)"}`,
-      }}
-    >
-      <span>{isAgent ? "🤖" : "📊"}</span>
-      {isAgent ? "智能综合预测" : "统计模型预测"}
-    </div>
-  );
-}
-
-/* ── Prediction summary card ── */
-function displayWinner(
-  winner: string | null,
-  homeTeam?: Team | null,
-  awayTeam?: Team | null,
-): string {
-  if (!winner) return "—";
-  if (winner.toLowerCase() === "draw") return "平局";
-  if (winner === homeTeam?.name || winner === homeTeam?.name_cn) return homeTeam.name_cn;
-  if (winner === awayTeam?.name || winner === awayTeam?.name_cn) return awayTeam.name_cn;
-  return winner;
-}
-
-function PredictionSummary({
-  prediction,
-  homeTeam,
-  awayTeam,
-}: {
-  prediction: AgentPrediction;
-  homeTeam?: Team | null;
-  awayTeam?: Team | null;
-}) {
-  const conf = prediction.confidence ?? 0.5;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.05 }}
-      className="rounded-xl p-4"
-      style={{
-        background: "var(--color-bg)",
-        border: `1px solid ${prediction.is_agent ? "var(--color-primary)" : "var(--color-gold)"}`,
-      }}
-    >
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs text-[var(--color-text-muted)] uppercase tracking-wider">
-          预测结果
-        </span>
-        <ModelBadge isAgent={prediction.is_agent} />
-      </div>
-
-      {/* Winner */}
-      <div className="flex items-end gap-4 mb-3">
-        <div>
-          <p className="text-xs text-[var(--color-text-muted)] mb-0.5">获胜方</p>
-          <p className="text-2xl font-bold text-[var(--color-text)]">
-            {displayWinner(prediction.winner, homeTeam, awayTeam)}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs text-[var(--color-text-muted)] mb-0.5">预测比分</p>
-          <p className="text-2xl font-bold font-mono text-[var(--color-accent)]">
-            {prediction.predicted_score || "暂无比分"}
-          </p>
-        </div>
-      </div>
-
-      {/* Confidence bar */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-xs text-[var(--color-text-muted)]">
-            置信度 · {confidenceLabel(conf)}
-          </span>
-          <span
-            className="text-sm font-bold font-mono"
-            style={{ color: confidenceColor(conf) }}
-          >
-            {(conf * 100).toFixed(0)}%
-          </span>
-        </div>
-        <div className="h-2 rounded-full overflow-hidden" style={{ background: "var(--color-surface)" }}>
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${Math.max(conf * 100, 2)}%` }}
-            transition={{ delay: 0.2, duration: 0.6, ease: "easeOut" }}
-            className="h-full rounded-full"
-            style={{
-              background: `linear-gradient(90deg, var(--color-primary), ${confidenceColor(conf)})`,
-            }}
-          />
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-/* ── Key factors list ── */
-function KeyFactorsList({ factors }: { factors: string[] }) {
-  return (
-    <div className="space-y-1.5">
-      <AnimatePresence>
-        {factors.map((factor, i) => (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.1 + i * 0.06 }}
-            className="flex items-start gap-2.5 text-sm"
-          >
-            <span
-              className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5"
-              style={{
-                background: "var(--color-primary)",
-                color: "#fff",
-              }}
-            >
-              {i + 1}
-            </span>
-            <span className="text-[var(--color-text)] leading-relaxed">{factor}</span>
-          </motion.div>
-        ))}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-/* ── Reasoning chain ── */
-function ReasoningChainView({
-  chain,
-}: {
-  chain: AgentPrediction["reasoning_chain"];
-}) {
-  if (!chain || chain.length === 0) {
-    return (
-      <p className="text-xs text-[var(--color-text-muted)] italic">
-        推理链数据为空
-      </p>
-    );
-  }
-
-  return (
-    <div className="relative">
-      {/* Vertical timeline line */}
-      <div
-        className="absolute left-[11px] top-2 bottom-2 w-px"
-        style={{ background: "var(--color-text-muted)", opacity: 0.2 }}
-      />
-
-      <div className="space-y-3">
-        {chain.map((step, i) => (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 + i * 0.08 }}
-            className="relative pl-8"
-          >
-            {/* Timeline dot */}
-            <div
-              className="absolute left-[5px] top-1 w-[13px] h-[13px] rounded-full border-2"
-              style={{
-                borderColor: "var(--color-primary)",
-                background: "var(--color-bg)",
-              }}
-            />
-
-            {/* Step header */}
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-bold text-[var(--color-primary)]">
-                步骤 {step.step_number > 0 ? step.step_number : i + 1}
-              </span>
-            </div>
-
-            {/* Finding */}
-            {step.finding && (
-              <p className="text-sm text-[var(--color-text)] leading-relaxed mb-0.5">
-                {step.finding}
-              </p>
-            )}
-
-            {/* Analysis */}
-            {step.analysis && (
-              <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">
-                💡 {step.analysis}
-              </p>
-            )}
-
-            {/* Conclusion */}
-            {step.conclusion && (
-              <p className="text-xs mt-1 font-medium" style={{ color: "var(--color-gold)" }}>
-                → {step.conclusion}
-              </p>
-            )}
-          </motion.div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ================================================================
-   Main Component
-   ================================================================ */
 
 interface Props {
-  prediction: AgentPrediction | null;
-  homeTeam?: Team | null;
-  awayTeam?: Team | null;
+  match: Match | null;
+  analysis: MatchPredictionResponse | null;
+  isLoading?: boolean;
 }
 
-export default function AIPunditPanel({ prediction, homeTeam, awayTeam }: Props) {
-  if (!prediction) {
-    return (
-      <div className="bg-[var(--color-surface)] rounded-xl p-4">
-        <EmptyState />
-      </div>
-    );
+export default function AIPunditPanel({ match, analysis, isLoading = false }: Props) {
+  if (!match) {
+    return <div className="rounded-xl bg-[var(--color-surface)] p-4"><EmptyState /></div>;
   }
 
+  const agent = analysis?.agent;
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="bg-[var(--color-surface)] rounded-xl p-5"
-      style={{
-        border: prediction.is_agent
-          ? "none"
-          : "1px solid rgba(245,197,24,0.25)",
-      }}
-    >
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
-        <span className="text-lg">🧠</span>
-        <h3 className="text-sm font-bold text-[var(--color-text)]">
-          智能赛事分析
-        </h3>
-      </div>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-xl bg-[var(--color-surface)] p-5">
+      <MathSummary match={match} math={analysis?.math} />
 
-      {/* Degradation warning */}
-      {!prediction.is_agent && <DegradationBanner />}
-
-      {/* Prediction summary */}
-      <PredictionSummary prediction={prediction} homeTeam={homeTeam} awayTeam={awayTeam} />
-
-      {/* Key factors */}
-      {prediction.key_factors && prediction.key_factors.length > 0 && (
-        <>
-          <SectionTitle>关键因素</SectionTitle>
-          <KeyFactorsList factors={prediction.key_factors} />
-        </>
+      <SectionTitle>AI 战术解读</SectionTitle>
+      {isLoading && (
+        <motion.div
+          animate={{ opacity: [0.45, 1, 0.45] }}
+          transition={{ repeat: Infinity, duration: 1.5 }}
+          className="rounded-lg bg-[var(--color-bg)] p-4 text-center text-sm text-[var(--color-text-muted)]"
+        >
+          🤖 正在基于上述数学结果生成解释…
+        </motion.div>
       )}
 
-      {/* Reasoning chain */}
-      {prediction.reasoning_chain && prediction.reasoning_chain.length > 0 && (
-        <>
-          <SectionTitle>推理链</SectionTitle>
-          <ReasoningChainView chain={prediction.reasoning_chain} />
-        </>
+      {!isLoading && agent?.status === "agent_unavailable" && (
+        <div className="rounded-lg border border-[var(--color-gold)]/30 bg-[var(--color-gold)]/10 p-3 text-xs text-[var(--color-gold)]">
+          ⚠️ {agent.message || "AI 暂时不可用；上方数学结果不受影响。"}
+        </div>
       )}
 
+      {!isLoading && agent?.status === "available" && (
+        <>
+          <div className="space-y-2">
+            {agent.key_factors.map((factor, index) => (
+              <p key={index} className="text-sm leading-relaxed">
+                <span className="mr-2 text-[var(--color-primary)]">{index + 1}.</span>{factor}
+              </p>
+            ))}
+          </div>
+          {agent.risk_notes.length > 0 && (
+            <>
+              <SectionTitle>风险与边界</SectionTitle>
+              <div className="space-y-1 text-xs text-[var(--color-text-muted)]">
+                {agent.risk_notes.map((note, index) => <p key={index}>· {note}</p>)}
+              </div>
+            </>
+          )}
+          {agent.reasoning_chain.length > 0 && (
+            <>
+              <SectionTitle>解释步骤</SectionTitle>
+              <ReasoningChain chain={agent.reasoning_chain} />
+            </>
+          )}
+        </>
+      )}
     </motion.div>
   );
 }

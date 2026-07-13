@@ -227,24 +227,54 @@ export interface SimulationResult {
 
 /** POST /predictions/match 响应 */
 export interface MatchPredictionResponse {
-  home_team: string;
-  away_team: string;
-  is_valid: boolean;
-  is_agent: boolean;
-  model_used: string;
-  errors: string[];
-  warnings: string[];
-  prediction: ValidatedPredictionData | null;
+  simulation_id: string;
+  match_key: string;
+  math: MatchMathContext;
+  agent: MatchAgentAnalysis;
   circuit_breaker: Record<string, unknown>;
 }
 
-export interface ValidatedPredictionData {
-  winner: string;
+export interface MatchOutcomeProbabilities {
+  home_win: number;
+  draw: number;
+  away_win: number;
+  home_advance: number;
+  away_advance: number;
+}
+
+export interface MatchMathContext {
+  simulation_id: string;
+  match_key: string;
+  scenario_type: "BASELINE" | "EVENT";
+  stage: string;
+  round_name: string;
+  home_team: Team;
+  away_team: Team;
   predicted_score: string;
-  confidence: number;
+  winner_team_id: number;
+  winner: string;
+  decided_by: "REGULAR_TIME" | "PENALTIES";
+  home_lambda: number;
+  away_lambda: number;
+  probabilities: MatchOutcomeProbabilities;
+  applied_events: Array<{
+    event_id: number;
+    team_id: number;
+    team_code: string;
+    title: string;
+    impact: Record<string, number>;
+  }>;
+}
+
+export interface MatchAgentAnalysis {
+  status: "available" | "agent_unavailable";
+  model_used: string | null;
+  message: string | null;
   key_factors: string[];
+  risk_notes: string[];
   reasoning_chain: ReasoningStep[];
   tool_calls_log: ToolCallRecord[];
+  warnings: string[];
 }
 
 /** GET /bracket 响应 */

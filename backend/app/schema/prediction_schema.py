@@ -8,11 +8,12 @@ Agent 预测结果的 Pydantic 校验模块 —— 第二层容错防线。
 from __future__ import annotations
 
 import re
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
 from app.config import settings  # noqa: F401
+from app.schema.simulation_schema import AppliedScenarioEvent, SimulationTeam
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +95,83 @@ class ValidationResult(BaseModel):
     cleaned_data: Optional[ValidatedPrediction] = None
     model_used: str = "qwen-max"
     is_agent: bool = True
+
+
+class AgentReportInput(BaseModel):
+    """Qwen 对既有数学结果的解释性报告。"""
+
+    key_factors: Optional[list[str]] = None
+    risk_notes: Optional[list[str]] = None
+    reasoning_chain: Optional[list[dict]] = None
+    tool_calls_log: Optional[list[dict]] = None
+
+
+class ValidatedAgentReport(BaseModel):
+    key_factors: list[str] = Field(min_length=1)
+    risk_notes: list[str] = Field(default_factory=list)
+    reasoning_chain: list[ReasoningStep] = Field(default_factory=list)
+    tool_calls_log: list[ToolCallRecord] = Field(default_factory=list)
+
+
+class AgentReportValidationResult(BaseModel):
+    is_valid: bool
+    errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    cleaned_data: Optional[ValidatedAgentReport] = None
+
+
+class MatchOutcomeProbabilities(BaseModel):
+    home_win: float = Field(ge=0.0, le=1.0)
+    draw: float = Field(ge=0.0, le=1.0)
+    away_win: float = Field(ge=0.0, le=1.0)
+    home_advance: float = Field(ge=0.0, le=1.0)
+    away_advance: float = Field(ge=0.0, le=1.0)
+
+
+class MatchMathContext(BaseModel):
+    simulation_id: str
+    match_key: str
+    scenario_type: Literal["BASELINE", "EVENT"]
+    stage: str
+    round_name: str
+    home_team: SimulationTeam
+    away_team: SimulationTeam
+    predicted_score: str
+    winner_team_id: int
+    winner: str
+    decided_by: Literal["REGULAR_TIME", "PENALTIES"]
+    home_lambda: float = Field(gt=0.0)
+    away_lambda: float = Field(gt=0.0)
+    probabilities: MatchOutcomeProbabilities
+    applied_events: list[AppliedScenarioEvent]
+
+
+class MatchAgentAnalysis(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
+    status: Literal["available", "agent_unavailable"]
+    model_used: Optional[str] = None
+    message: Optional[str] = None
+    key_factors: list[str] = Field(default_factory=list)
+    risk_notes: list[str] = Field(default_factory=list)
+    reasoning_chain: list[ReasoningStep] = Field(default_factory=list)
+    tool_calls_log: list[ToolCallRecord] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class SimulatedMatchAnalysisRequest(BaseModel):
+    simulation_id: str = Field(min_length=1)
+    match_key: str = Field(min_length=1)
+
+
+class SimulatedMatchAnalysisResponse(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
+    simulation_id: str
+    match_key: str
+    math: MatchMathContext
+    agent: MatchAgentAnalysis
+    circuit_breaker: dict
 
 
 # ---------------------------------------------------------------------------
@@ -276,3 +354,66 @@ def validate_prediction(data: PredictionInput) -> ValidationResult:
             warnings=[],
             cleaned_data=None,
         )
+
+
+def validate_agent_report(data: AgentReportInput) -> AgentReportValidationResult:
+    """校验解释报告，并强制推理步骤从 1 开始连续编号。"""
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    key_factors = [
+        factor.strip()
+        for factor in (data.key_factors or [])
+        if isinstance(factor, str) and len(factor.strip()) >= 5
+    ][:10]
+    if not key_factors:
+        errors.append("key_factors 不能为空")
+
+    risk_notes = [
+        note.strip()
+        for note in (data.risk_notes or [])
+        if isinstance(note, str) and note.strip()
+    ][:10]
+
+    reasoning_chain: list[ReasoningStep] = []
+    for item in data.reasoning_chain or []:
+        if not isinstance(item, dict):
+            warnings.append("reasoning_chain 中存在无效条目，已跳过")
+            continue
+        finding = item.get("finding")
+        if not isinstance(finding, str) or not finding.strip():
+            warnings.append("reasoning_chain 中某项缺少 finding，已跳过")
+            continue
+        reasoning_chain.append(ReasoningStep(
+            step_number=len(reasoning_chain) + 1,
+            tool_used=item.get("tool_used"),
+            finding=finding.strip(),
+            analysis=item.get("analysis"),
+        ))
+    if not reasoning_chain:
+        errors.append("reasoning_chain 不能为空")
+
+    tool_calls: list[ToolCallRecord] = []
+    for item in data.tool_calls_log or []:
+        try:
+            tool_calls.append(ToolCallRecord.model_validate(item))
+        except Exception:
+            warnings.append("tool_calls_log 中存在无效条目，已跳过")
+
+    if errors:
+        return AgentReportValidationResult(
+            is_valid=False,
+            errors=errors,
+            warnings=warnings,
+        )
+    return AgentReportValidationResult(
+        is_valid=True,
+        errors=[],
+        warnings=warnings,
+        cleaned_data=ValidatedAgentReport(
+            key_factors=key_factors,
+            risk_notes=risk_notes,
+            reasoning_chain=reasoning_chain,
+            tool_calls_log=tool_calls,
+        ),
+    )

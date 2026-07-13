@@ -15,7 +15,13 @@ import pytest
 
 from app.services.circuit_breaker import CircuitBreaker, CircuitState
 from app.services.poisson_predictor import PoissonPredictor
-from app.schema.prediction_schema import PredictionInput, validate_prediction
+from app.schema.prediction_schema import (
+    AgentReportInput,
+    PredictionInput,
+    validate_agent_report,
+    validate_prediction,
+)
+from app.services.agent_service import AgentService
 
 
 # ── CircuitBreaker ────────────────────────────────────────
@@ -165,3 +171,24 @@ class TestPredictionSchema:
         result = validate_prediction(data)
         assert result.is_valid is False
         assert any("reasoning_chain" in e for e in result.errors)
+
+    def test_agent_report_steps_are_renumbered_continuously(self):
+        result = validate_agent_report(AgentReportInput(
+            key_factors=["后端数学结果保持不变"],
+            risk_notes=["代表路径不是唯一结果"],
+            reasoning_chain=[
+                {"step_number": 0, "finding": "读取数学上下文"},
+                {"step_number": 9, "finding": "解释事件影响"},
+            ],
+        ))
+        assert result.is_valid is True
+        assert [
+            step.step_number for step in result.cleaned_data.reasoning_chain
+        ] == [1, 2]
+
+    def test_agent_analysis_tool_cannot_submit_math_results(self):
+        tool = AgentService._submit_match_analysis_tool_def()
+        properties = tool["function"]["parameters"]["properties"]
+        assert "winner" not in properties
+        assert "predicted_score" not in properties
+        assert "confidence" not in properties

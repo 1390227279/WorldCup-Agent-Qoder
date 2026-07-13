@@ -46,6 +46,28 @@ def _eg(attack_elo: float, defense_elo: float) -> float:
     return max(atk / df, 0.1)
 
 
+def calculate_match_lambdas(
+    home_elo: float,
+    away_elo: float,
+    home_code: str,
+    away_code: str,
+    team_impacts: Optional[dict] = None,
+) -> tuple[float, float]:
+    """使用与赛事模拟完全相同的公式计算单场进球期望。"""
+    home_lambda = _eg(home_elo, away_elo)
+    away_lambda = _eg(away_elo, home_elo)
+    if team_impacts:
+        home_impact = team_impacts.get(home_code, {})
+        away_impact = team_impacts.get(away_code, {})
+        home_lambda *= (1.0 + home_impact.get(ATTACK_LAMBDA_DELTA, 0.0)) * (
+            1.0 + away_impact.get(CONCEDE_LAMBDA_DELTA, 0.0)
+        )
+        away_lambda *= (1.0 + away_impact.get(ATTACK_LAMBDA_DELTA, 0.0)) * (
+            1.0 + home_impact.get(CONCEDE_LAMBDA_DELTA, 0.0)
+        )
+    return max(home_lambda, 0.1), max(away_lambda, 0.1)
+
+
 def _knockout_winner(
     home,
     away,
@@ -476,20 +498,13 @@ class MonteCarloEngine:
 
     @staticmethod
     def _match_lambdas(home, away, team_info, team_impacts):
-        home_lambda = _eg(home[3], away[3])
-        away_lambda = _eg(away[3], home[3])
-        if team_impacts:
-            home_code = team_info[home[0]][4]
-            away_code = team_info[away[0]][4]
-            home_impact = team_impacts.get(home_code, {})
-            away_impact = team_impacts.get(away_code, {})
-            home_lambda *= (1.0 + home_impact.get(ATTACK_LAMBDA_DELTA, 0.0)) * (
-                1.0 + away_impact.get(CONCEDE_LAMBDA_DELTA, 0.0)
-            )
-            away_lambda *= (1.0 + away_impact.get(ATTACK_LAMBDA_DELTA, 0.0)) * (
-                1.0 + home_impact.get(CONCEDE_LAMBDA_DELTA, 0.0)
-            )
-        return home_lambda, away_lambda
+        return calculate_match_lambdas(
+            home[3],
+            away[3],
+            team_info[home[0]][4],
+            team_info[away[0]][4],
+            team_impacts,
+        )
 
     @staticmethod
     def _path_match(

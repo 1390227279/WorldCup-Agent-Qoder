@@ -58,12 +58,10 @@ export const api = {
     fetchJSON<import("../types").ChampionPrediction>("/predictions/champion"),
   getMatchPrediction: (id: number) =>
     fetchJSON<import("../types").AgentPrediction>(`/predictions/match/${id}`),
-  predictMatch: (homeTeam: import("../types").Team, awayTeam: import("../types").Team) =>
+  predictMatch: (simulationId: string, matchKey: string) =>
     postJSON<import("../types").MatchPredictionResponse>("/predictions/match", {
-      home_team_id: homeTeam.id,
-      away_team_id: awayTeam.id,
-      home_team_code: homeTeam.fifa_code,
-      away_team_code: awayTeam.fifa_code,
+      simulation_id: simulationId,
+      match_key: matchKey,
     }),
   recalculate: () => postJSON<{ status: string }>("/predictions/recalculate"),
 

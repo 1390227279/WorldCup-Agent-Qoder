@@ -8,7 +8,7 @@ import ScenarioSlider from "../components/ScenarioSlider";
 import AIPunditPanel from "../components/AIPunditPanel";
 import { usePredictions } from "../hooks/usePredictions";
 import { api, simulationQueryKeys } from "../services/api";
-import type { Match, AgentPrediction, SimulationResult } from "../types";
+import type { Match, SimulationResult } from "../types";
 
 export default function BracketSandboxPage() {
   const [selectedEventIds, setSelectedEventIds] = useState<number[]>([]);
@@ -114,44 +114,17 @@ export default function BracketSandboxPage() {
       setSelectedMatch(match);
       resetPrediction();
       if (
-        match.home_team &&
-        match.away_team &&
-        match.home_team.id > 0 &&
-        match.away_team.id > 0
+        simulation?.simulation_id &&
+        match.match_key
       ) {
         predictMatch({
-          homeTeam: match.home_team,
-          awayTeam: match.away_team,
+          simulationId: simulation.simulation_id,
+          matchKey: match.match_key,
         });
       }
     },
-    [predictMatch, resetPrediction],
+    [predictMatch, resetPrediction, simulation],
   );
-
-  const effectivePrediction: AgentPrediction | null = (() => {
-    const mp = mutationResult;
-    if (mp?.prediction) {
-      const p = mp.prediction;
-      return {
-        id: 0,
-        match_id: selectedMatch?.id ?? 0,
-        winner: p.winner,
-        predicted_score: p.predicted_score,
-        confidence: p.confidence,
-        key_factors: p.key_factors,
-        reasoning_chain: p.reasoning_chain.map((r, index) => ({
-          step_number: r.step_number > 0 ? r.step_number : index + 1,
-          tool_used: r.tool_used,
-          finding: r.finding,
-          analysis: r.analysis,
-        })),
-        is_agent: mp.is_agent,
-        model_used: mp.model_used,
-        tool_calls_log: p.tool_calls_log,
-      };
-    }
-    return null;
-  })();
 
   const scenarioComparison = useMemo(() => {
     if (
@@ -185,6 +158,12 @@ export default function BracketSandboxPage() {
       }),
     };
   }, [baselineSimulation, scenarioSimulation]);
+
+  const selectedAnalysis = (
+    mutationResult &&
+    selectedMatch?.match_key === mutationResult.match_key &&
+    simulation?.simulation_id === mutationResult.simulation_id
+  ) ? mutationResult : null;
 
   return (
     <div className="max-w-[1600px] mx-auto px-4 py-4">
@@ -346,18 +325,6 @@ export default function BracketSandboxPage() {
                   )}
                 </div>
 
-                {isPending && (
-                  <div className="bg-[var(--color-surface)] rounded-xl p-4 text-center">
-                    <motion.div
-                      animate={{ opacity: [0.4, 1, 0.4] }}
-                      transition={{ repeat: Infinity, duration: 1.5 }}
-                      className="text-sm text-[var(--color-text-muted)]"
-                    >
-                      🤖 正在分析比赛…
-                    </motion.div>
-                  </div>
-                )}
-
                 {predictError && (
                   <div className="bg-[var(--color-surface)] rounded-xl p-4 text-center mb-3">
                     <p className="text-sm text-[var(--color-accent)]">
@@ -367,13 +334,11 @@ export default function BracketSandboxPage() {
                   </div>
                 )}
 
-                {!isPending && (
-                  <AIPunditPanel
-                    prediction={effectivePrediction}
-                    homeTeam={selectedMatch.home_team}
-                    awayTeam={selectedMatch.away_team}
-                  />
-                )}
+                <AIPunditPanel
+                  match={selectedMatch}
+                  analysis={selectedAnalysis}
+                  isLoading={isPending}
+                />
               </motion.div>
             ) : (
               <motion.div
@@ -382,7 +347,7 @@ export default function BracketSandboxPage() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
               >
-                <AIPunditPanel prediction={null} />
+                <AIPunditPanel match={null} analysis={null} />
               </motion.div>
             )}
           </AnimatePresence>

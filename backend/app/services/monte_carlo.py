@@ -13,9 +13,11 @@ from app.services.scenario_resolver import (
     CONCEDE_LAMBDA_DELTA,
 )
 from app.services.simulation_models import (
+    ADVANCEMENT_STAGES,
     KeyedRandom,
     MODEL_VERSION,
     SimulationInput,
+    TournamentOutcome,
     derive_child_seed,
 )
 from app.services.tournament_rules import (
@@ -111,25 +113,65 @@ class MonteCarloEngine:
         }
         impacts = simulation_input.impact_by_code
 
-        champion_counts: dict[str, int] = defaultdict(int)
+        advancement_counts: dict[str, dict[int, int]] = {
+            stage: defaultdict(int) for stage in ADVANCEMENT_STAGES
+        }
         for iteration in range(simulation_input.iterations):
             iteration_seed = derive_child_seed(master_seed, "iteration", iteration)
-            champion = self._sim_one(
+            outcome = self._sim_one(
                 team_ids,
                 team_info,
                 KeyedRandom(iteration_seed),
                 impacts,
             )
-            champion_counts[champion] += 1
+            for stage, reached_team_ids in outcome.reached_team_ids.items():
+                for team_id in reached_team_ids:
+                    advancement_counts[stage][team_id] += 1
 
-        total = max(sum(champion_counts.values()), 1)
-        probabilities = {
-            name: champion_counts[name] / total for name in sorted(champion_counts)
+        total = max(simulation_input.iterations, 1)
+        advancement_probs = {
+            team.id: {
+                "team_id": team.id,
+                "team": public_teams[team.id],
+                **{
+                    stage: advancement_counts[stage][team.id] / total
+                    for stage in ADVANCEMENT_STAGES
+                },
+            }
+            for team in simulation_input.teams
         }
-        top3 = sorted(probabilities.items(), key=lambda item: (-item[1], item[0]))[:3]
+        champion_probs_by_team_id = {
+            team.id: advancement_probs[team.id]["CHAMPION"]
+            for team in simulation_input.teams
+        }
+        ranked_team_ids = sorted(
+            champion_probs_by_team_id,
+            key=lambda team_id: (-champion_probs_by_team_id[team_id], team_id),
+        )
+        probability_leader_id = ranked_team_ids[0]
+        probability_leader = {
+            "team": public_teams[probability_leader_id],
+            "probability": champion_probs_by_team_id[probability_leader_id],
+        }
+        top3_teams = [
+            {
+                "team": public_teams[team_id],
+                "probability": champion_probs_by_team_id[team_id],
+            }
+            for team_id in ranked_team_ids[:3]
+        ]
+
+        # Temporary compatibility fields for the current frontend. Commit 08/09
+        # will switch consumers to the ID-based canonical structures above.
+        probabilities = {
+            public_teams[team_id]["name"]: champion_probs_by_team_id[team_id]
+            for team_id in ranked_team_ids
+            if champion_probs_by_team_id[team_id] > 0
+        }
+        top3 = [(entry["team"]["name"], entry["probability"]) for entry in top3_teams]
 
         path_seed = derive_child_seed(master_seed, "temporary-path")
-        path_champion, stages = self._sim_one(
+        path_outcome = self._sim_one(
             team_ids,
             team_info,
             KeyedRandom(path_seed),
@@ -142,13 +184,17 @@ class MonteCarloEngine:
             "simulation_id": uuid.uuid4().hex,
             "seed": master_seed,
             "event_ids": list(simulation_input.event_ids),
+            "advancement_probs": advancement_probs,
+            "champion_probs_by_team_id": champion_probs_by_team_id,
+            "probability_leader": probability_leader,
+            "top3_teams": top3_teams,
             "champion_probs": probabilities,
             "top3": top3,
             "iterations": simulation_input.iterations,
             "model_version": MODEL_VERSION,
             "input_fingerprint": simulation_input.fingerprint(),
-            "predicted_champion": path_champion,
-            "stages": stages,
+            "predicted_champion": path_outcome.champion_name,
+            "stages": path_outcome.stages,
         }
         with self._lock:
             self._cache[cache_key] = (time.time(), result)
@@ -263,8 +309,10 @@ class MonteCarloEngine:
         current = [
             slot for pairing in round_of_32 for slot in (pairing.home, pairing.away)
         ]
+        reached_team_ids = {"R32": tuple(slot.team_id for slot in current)}
         stages: dict[str, dict] = {}
         stage_names = ["R32", "R16", "QF", "SF"]
+        next_stage = {"R32": "R16", "R16": "QF", "QF": "SF", "SF": "FINAL"}
         stage_labels = {
             "R32": "32 强",
             "R16": "16 强",
@@ -325,6 +373,9 @@ class MonteCarloEngine:
                         )
                     )
             current = winners
+            reached_team_ids[next_stage[stage_name]] = tuple(
+                slot.team_id for slot in current
+            )
             if capture_path:
                 stages[stage_name] = {
                     "label": stage_labels[stage_name],
@@ -349,6 +400,7 @@ class MonteCarloEngine:
             "FINAL",
             0,
         )
+        reached_team_ids["CHAMPION"] = (winner[0],)
         if capture_path and team_by_id is not None:
             stages["FINAL"] = {
                 "label": stage_labels["FINAL"],
@@ -368,8 +420,17 @@ class MonteCarloEngine:
                     )
                 ],
             }
-            return winner[1], stages
-        return winner[1]
+            return TournamentOutcome(
+                champion_team_id=winner[0],
+                champion_name=winner[1],
+                reached_team_ids=reached_team_ids,
+                stages=stages,
+            )
+        return TournamentOutcome(
+            champion_team_id=winner[0],
+            champion_name=winner[1],
+            reached_team_ids=reached_team_ids,
+        )
 
     @staticmethod
     def _match_lambdas(home, away, team_info, team_impacts):

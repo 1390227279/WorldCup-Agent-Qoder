@@ -307,6 +307,7 @@ class TestBracketEndpoint:
         assert first_body["seed"] == second_body["seed"] == 20260713
         assert first_body["input_fingerprint"] == second_body["input_fingerprint"]
         assert first_body["champion_probs"] == second_body["champion_probs"]
+        assert first_body["advancement_probs"] == second_body["advancement_probs"]
         assert first_body["stages"] == second_body["stages"]
         assert all(
             match["decided_by"] in {"REGULAR_TIME", "PENALTIES"}

@@ -18,6 +18,7 @@ from app.services.tournament_rules import GROUP_NAMES
 MIN_EXPECTED_GOALS = 0.05
 MAX_EXPECTED_GOALS = 8.0
 MODEL_VERSION = "elo-poisson-deterministic-v1"
+ADVANCEMENT_STAGES = ("R32", "R16", "QF", "SF", "FINAL", "CHAMPION")
 
 
 class SimulationInputError(ValueError):
@@ -72,6 +73,14 @@ class TeamImpactInput:
     fifa_code: str
     attack_lambda_delta: float = 0.0
     concede_lambda_delta: float = 0.0
+
+
+@dataclass(slots=True)
+class TournamentOutcome:
+    champion_team_id: int
+    champion_name: str
+    reached_team_ids: dict[str, tuple[int, ...]]
+    stages: dict[str, dict] | None = None
 
 
 @dataclass(frozen=True, slots=True)

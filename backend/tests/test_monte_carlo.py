@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from app.services.monte_carlo import MonteCarloEngine
 from app.services.simulation_models import (
     KeyedRandom,
@@ -37,6 +39,7 @@ def test_same_seed_produces_identical_probabilities_and_path():
     assert first["seed"] == second["seed"] == 20260713
     assert first["input_fingerprint"] == second["input_fingerprint"]
     assert first["champion_probs"] == second["champion_probs"]
+    assert first["advancement_probs"] == second["advancement_probs"]
     assert first["top3"] == second["top3"]
     assert first["predicted_champion"] == second["predicted_champion"]
     assert first["stages"] == second["stages"]
@@ -94,3 +97,47 @@ def test_simulation_input_has_stable_fingerprint():
     second = SimulationInput.from_raw(reversed(teams), iterations=100, seed=7)
 
     assert first.fingerprint() == second.fingerprint()
+
+
+def test_advancement_probabilities_have_valid_totals_and_monotonicity():
+    result = MonteCarloEngine().run(
+        _teams(), iterations=200, seed=20260713, force_refresh=True
+    )
+    probabilities = result["advancement_probs"]
+
+    expected_totals = {
+        "R32": 32,
+        "R16": 16,
+        "QF": 8,
+        "SF": 4,
+        "FINAL": 2,
+        "CHAMPION": 1,
+    }
+    for stage, expected_total in expected_totals.items():
+        assert sum(team[stage] for team in probabilities.values()) == pytest.approx(
+            expected_total
+        )
+
+    for team in probabilities.values():
+        stages = [
+            team["R32"],
+            team["R16"],
+            team["QF"],
+            team["SF"],
+            team["FINAL"],
+            team["CHAMPION"],
+        ]
+        assert all(0.0 <= probability <= 1.0 for probability in stages)
+        assert stages == sorted(stages, reverse=True)
+
+
+def test_probability_leader_and_top3_use_id_based_champion_probabilities():
+    result = MonteCarloEngine().run(
+        _teams(), iterations=200, seed=99, force_refresh=True
+    )
+    leader = result["probability_leader"]
+    leader_id = leader["team"]["id"]
+
+    assert leader["probability"] == max(result["champion_probs_by_team_id"].values())
+    assert result["champion_probs_by_team_id"][leader_id] == leader["probability"]
+    assert result["top3_teams"][0] == leader

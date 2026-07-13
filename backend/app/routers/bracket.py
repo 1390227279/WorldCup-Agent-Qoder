@@ -5,10 +5,9 @@
 
 import logging
 from collections import defaultdict
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -17,6 +16,7 @@ from app.models.match import Match
 from app.models.team import Team
 from app.models.tournament import DEFAULT_TOURNAMENT_CODE, Tournament, TournamentTeam
 from app.services.monte_carlo import get_engine
+from app.services.scenario_resolver import resolve_scenario_events
 
 logger = logging.getLogger(__name__)
 
@@ -210,28 +210,8 @@ async def get_simulation_results(
         return {"error": "No teams available"}
 
     # 2. 处理事件影响
-    team_impacts = None
-    if event_ids:
-        from app.models.event import Event
-        ids = [int(x.strip()) for x in event_ids.split(",") if x.strip().isdigit()]
-        if ids:
-            now = datetime.utcnow()
-            events_result = await db.execute(
-                select(Event).where(
-                    Event.id.in_(ids), Event.active == True,
-                    or_(Event.effective_at.is_(None), Event.effective_at <= now),
-                    or_(Event.expires_at.is_(None), Event.expires_at > now),
-                )
-            )
-            events = events_result.scalars().all()
-            impact_map: dict = defaultdict(lambda: {"attack": 0.0, "defense": 0.0})
-            for ev in events:
-                if ev.team and ev.impact:
-                    code = ev.team.fifa_code
-                    for key, val in ev.impact.items():
-                        if isinstance(val, (int, float)):
-                            impact_map[code][key] = impact_map[code].get(key, 0.0) + val
-            team_impacts = dict(impact_map)
+    scenario = await resolve_scenario_events(db, event_ids)
+    team_impacts = scenario.team_impacts or None
 
     # 3. 构建球队数据
     teams_data = []
@@ -253,5 +233,6 @@ async def get_simulation_results(
     engine = get_engine()
     result = engine.run(teams_data, iterations=iterations,
                         force_refresh=refresh, team_impacts=team_impacts,
-                        event_ids=ids if event_ids else [])
+                        event_ids=scenario.requested_event_ids)
+    result.update(scenario.audit_dict())
     return result

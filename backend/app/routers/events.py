@@ -17,6 +17,14 @@ from app.models.event import Event
 from app.models.team import Team
 from app.services.monte_carlo import get_engine
 from app.services.event_sources import FileEventSource
+from app.services.scenario_resolver import (
+    ATTACK_LAMBDA_DELTA,
+    CONCEDE_LAMBDA_DELTA,
+    MAX_EVENT_DELTA,
+    MIN_EVENT_DELTA,
+    EventImpactError,
+    normalize_impact_for_storage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +71,15 @@ def _event_to_dict(event: Event) -> dict:
 
 @router.get("/types")
 async def get_event_types():
-    return {"types": TYPE_LABELS, "severities": SEVERITY_LABELS}
+    return {
+        "types": TYPE_LABELS,
+        "severities": SEVERITY_LABELS,
+        "impact_fields": {
+            ATTACK_LAMBDA_DELTA: "本队进球期望修正",
+            CONCEDE_LAMBDA_DELTA: "对手面对本队时的进球期望修正",
+        },
+        "impact_range": {"min": MIN_EVENT_DELTA, "max": MAX_EVENT_DELTA},
+    }
 
 @router.get("")
 async def list_events(
@@ -93,10 +109,16 @@ async def create_event(req: EventCreate, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=400, detail="事件类型无效")
     if req.severity not in SEVERITY_LABELS:
         raise HTTPException(status_code=400, detail="严重程度无效")
+    if req.effective_at and req.expires_at and req.expires_at <= req.effective_at:
+        raise HTTPException(status_code=400, detail="失效时间必须晚于生效时间")
+    try:
+        normalized_impact = normalize_impact_for_storage(req.impact)
+    except EventImpactError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     event = Event(
         team_id=req.team_id, type=req.type, title=req.title,
         description=req.description, severity=req.severity,
-        impact=req.impact, source=req.source, active=True,
+        impact=normalized_impact, source=req.source, active=True,
         source_type=req.source_type, source_url=req.source_url,
         external_id=req.external_id, effective_at=req.effective_at,
         expires_at=req.expires_at,
@@ -125,13 +147,20 @@ async def update_event(event_id: int, req: EventUpdate, db: AsyncSession = Depen
             raise HTTPException(status_code=400, detail="严重程度无效")
         event.severity = req.severity
     if req.impact is not None:
-        event.impact = req.impact
+        try:
+            event.impact = normalize_impact_for_storage(req.impact)
+        except EventImpactError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     if req.active is not None:
         event.active = req.active
     for field_name in ("source", "source_type", "source_url", "external_id", "effective_at", "expires_at"):
         value = getattr(req, field_name)
         if value is not None:
             setattr(event, field_name, value)
+    effective_at = req.effective_at if req.effective_at is not None else event.effective_at
+    expires_at = req.expires_at if req.expires_at is not None else event.expires_at
+    if effective_at and expires_at and expires_at <= effective_at:
+        raise HTTPException(status_code=400, detail="失效时间必须晚于生效时间")
     await db.commit()
     get_engine().invalidate_cache()
     result = await db.execute(
@@ -174,7 +203,7 @@ def _parse_impact(value) -> Optional[dict]:
 async def download_import_template():
     content = (
         "fifa_code,type,title,description,severity,impact,source,source_type,source_url,external_id,effective_at,expires_at,active\n"
-        "ARG,MORALE,示例事件,事件说明,MAJOR,\"{\"\"team_morale\"\":0.1}\",官方公告,IMPORT,https://example.com,event-001,2026-06-01T00:00:00,2026-07-31T23:59:59,true\n"
+        "ARG,INJURY,示例事件,事件说明,MAJOR,\"{\"\"attack_lambda_delta\"\":-0.1}\",官方公告,IMPORT,https://example.com,event-001,2026-06-01T00:00:00,2026-07-31T23:59:59,true\n"
     )
     return Response(
         content=content.encode("utf-8-sig"),
@@ -232,7 +261,7 @@ async def import_events(
                 "title": title,
                 "description": str(raw.get("description", "") or "").strip() or None,
                 "severity": severity,
-                "impact": _parse_impact(raw.get("impact")),
+                "impact": normalize_impact_for_storage(_parse_impact(raw.get("impact"))),
                 "source": source,
                 "source_type": source_type,
                 "source_url": str(raw.get("source_url", "") or "").strip() or None,

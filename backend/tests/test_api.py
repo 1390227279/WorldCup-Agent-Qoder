@@ -110,6 +110,7 @@ class TestEventsEndpoint:
             "impact": {"attack": -0.05},
         })
         assert created.status_code == 200
+        assert created.json()["impact"] == {"attack_lambda_delta": -0.05}
         event_id = created.json()["id"]
 
         after_create = await client.get("/api/v1/bracket/simulation?iterations=100")
@@ -263,3 +264,31 @@ class TestBracketEndpoint:
 
         refreshed = await client.get("/api/v1/bracket/simulation?iterations=100&refresh=true")
         assert refreshed.json()["simulation_id"] != body["simulation_id"]
+
+    async def test_simulation_returns_event_application_audit(self, client):
+        teams = (await client.get("/api/v1/teams")).json()
+        argentina = next(team for team in teams if team["fifa_code"] == "ARG")
+        created = await client.post("/api/v1/events", json={
+            "team_id": argentina["id"],
+            "type": "INJURY",
+            "title": "进攻核心缺阵",
+            "severity": "MAJOR",
+            "impact": {"attack": -0.1},
+        })
+        event_id = created.json()["id"]
+
+        response = await client.get(
+            f"/api/v1/bracket/simulation?iterations=100&event_ids={event_id},999999"
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["requested_event_ids"] == [event_id, 999999]
+        assert body["event_ids"] == [event_id, 999999]
+        assert body["team_impacts"]["ARG"] == {
+            "attack_lambda_delta": -0.1,
+            "concede_lambda_delta": 0.0,
+        }
+        assert [event["event_id"] for event in body["applied_events"]] == [event_id]
+        assert body["ignored_events"] == [
+            {"event_id": 999999, "reason": "not_found"}
+        ]

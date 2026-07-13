@@ -17,7 +17,9 @@ class Event(Base):
     title = Column(String(200), nullable=False)
     description = Column(String(1000), nullable=True)
     severity = Column(String(10), nullable=False, default="MINOR")  # CRITICAL, MAJOR, MINOR
-    impact = Column(JSON, nullable=True)  # {"attack": -0.20, "defense": 0, "cohesion": -0.10}
+    # Canonical simulator keys: attack_lambda_delta, concede_lambda_delta.
+    # Other keys remain available to the Agent as qualitative context.
+    impact = Column(JSON, nullable=True)
     source = Column(String(200), nullable=True)
     source_type = Column(String(30), nullable=False, default="MANUAL")
     source_url = Column(String(500), nullable=True)

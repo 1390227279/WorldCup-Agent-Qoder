@@ -15,6 +15,8 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.scenario_resolver import event_is_current
+
 
 @dataclass
 class EventSummary:
@@ -88,7 +90,7 @@ class EventInjector:
         # Get active events
         report = TeamEventReport(team_name=team.name, team_code=team.fifa_code)
         for event in team.events:
-            if not event.active:
+            if not event_is_current(event):
                 continue
             summary = EventSummary(
                 id=event.id,
@@ -116,13 +118,13 @@ class EventInjector:
     async def get_all_active_events(self) -> list[EventSummary]:
         """Get all active events across all teams."""
         from app.models.event import Event
-        result = await self.db.execute(
-            select(Event).where(Event.active == True)
-        )
+        result = await self.db.execute(select(Event).where(Event.active == True))
         events = result.scalars().all()
 
         summaries: list[EventSummary] = []
         for e in events:
+            if not event_is_current(e):
+                continue
             summaries.append(EventSummary(
                 id=e.id,
                 team_name=e.team.name if e.team else "Unknown",

@@ -43,7 +43,11 @@ class MonteCarloEngine:
         cache_key = f"{cache_key}:{iterations}"
         if team_impacts:
             impact_str = ",".join(f"{k}:{v}" for k, v in sorted(
-                (code, f"{imp.get('attack',0):.2f},{imp.get('defense',0):.2f}")
+                (
+                    code,
+                    f"{imp.get('attack_lambda_delta',0):.2f},"
+                    f"{imp.get('concede_lambda_delta',0):.2f}",
+                )
                 for code, imp in team_impacts.items()
             ))
             cache_key = f"{cache_key}:imp({impact_str})"
@@ -134,8 +138,8 @@ class MonteCarloEngine:
                         away_code = tid2info[b[0]][4]
                         home_imp = team_impacts.get(home_code, {})
                         away_imp = team_impacts.get(away_code, {})
-                        lambda_home *= (1.0 + home_imp.get("attack", 0.0)) * (1.0 + away_imp.get("defense", 0.0))
-                        lambda_away *= (1.0 + away_imp.get("attack", 0.0)) * (1.0 + home_imp.get("defense", 0.0))
+                        lambda_home *= (1.0 + home_imp.get("attack_lambda_delta", 0.0)) * (1.0 + away_imp.get("concede_lambda_delta", 0.0))
+                        lambda_away *= (1.0 + away_imp.get("attack_lambda_delta", 0.0)) * (1.0 + home_imp.get("concede_lambda_delta", 0.0))
                         lambda_home = max(lambda_home, 0.05)
                         lambda_away = max(lambda_away, 0.05)
                     hg = int(rng.poisson(lambda_home))
@@ -194,8 +198,8 @@ class MonteCarloEngine:
                     away_code = tid2info[b[0]][4]
                     home_imp = team_impacts.get(home_code, {})
                     away_imp = team_impacts.get(away_code, {})
-                    lambda_home *= (1.0 + home_imp.get("attack", 0.0)) * (1.0 + away_imp.get("defense", 0.0))
-                    lambda_away *= (1.0 + away_imp.get("attack", 0.0)) * (1.0 + home_imp.get("defense", 0.0))
+                    lambda_home *= (1.0 + home_imp.get("attack_lambda_delta", 0.0)) * (1.0 + away_imp.get("concede_lambda_delta", 0.0))
+                    lambda_away *= (1.0 + away_imp.get("attack_lambda_delta", 0.0)) * (1.0 + home_imp.get("concede_lambda_delta", 0.0))
                     lambda_home = max(lambda_home, 0.05)
                     lambda_away = max(lambda_away, 0.05)
                 hg = int(rng.poisson(lambda_home))
@@ -237,8 +241,8 @@ class MonteCarloEngine:
             away_code = tid2info[b[0]][4]
             home_imp = team_impacts.get(home_code, {})
             away_imp = team_impacts.get(away_code, {})
-            lambda_home *= (1.0 + home_imp.get("attack", 0.0)) * (1.0 + away_imp.get("defense", 0.0))
-            lambda_away *= (1.0 + away_imp.get("attack", 0.0)) * (1.0 + home_imp.get("defense", 0.0))
+            lambda_home *= (1.0 + home_imp.get("attack_lambda_delta", 0.0)) * (1.0 + away_imp.get("concede_lambda_delta", 0.0))
+            lambda_away *= (1.0 + away_imp.get("attack_lambda_delta", 0.0)) * (1.0 + home_imp.get("concede_lambda_delta", 0.0))
             lambda_home = max(lambda_home, 0.05)
             lambda_away = max(lambda_away, 0.05)
         hg = int(rng.poisson(lambda_home))

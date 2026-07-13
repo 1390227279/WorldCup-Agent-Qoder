@@ -1,5 +1,6 @@
 """Monte Carlo Tournament Simulator — deterministic ELO + Poisson."""
 
+import math
 import threading
 import time
 import uuid
@@ -12,6 +13,10 @@ from app.services.scenario_resolver import (
     ATTACK_LAMBDA_DELTA,
     CONCEDE_LAMBDA_DELTA,
 )
+from app.services.representative_path import (
+    REPRESENTATIVE_PATH_TYPE,
+    RepresentativePathSelector,
+)
 from app.services.simulation_models import (
     ADVANCEMENT_STAGES,
     KeyedRandom,
@@ -19,6 +24,7 @@ from app.services.simulation_models import (
     SimulationInput,
     TournamentOutcome,
     derive_child_seed,
+    poisson_log_probability,
 )
 from app.services.tournament_rules import (
     BracketSlot,
@@ -50,17 +56,17 @@ def _knockout_winner(
     match_index: int,
 ):
     if home_score > away_score:
-        return home, "REGULAR_TIME"
+        return home, "REGULAR_TIME", 0.0
     if away_score > home_score:
-        return away, "REGULAR_TIME"
+        return away, "REGULAR_TIME", 0.0
 
     home_penalty_probability = 1.0 / (1.0 + 10.0 ** ((away[3] - home[3]) / 400.0))
     if (
         random_source.uniform(stage, match_index, "penalties")
         < home_penalty_probability
     ):
-        return home, "PENALTIES"
-    return away, "PENALTIES"
+        return home, "PENALTIES", math.log(home_penalty_probability)
+    return away, "PENALTIES", math.log(1.0 - home_penalty_probability)
 
 
 class MonteCarloEngine:
@@ -116,6 +122,7 @@ class MonteCarloEngine:
         advancement_counts: dict[str, dict[int, int]] = {
             stage: defaultdict(int) for stage in ADVANCEMENT_STAGES
         }
+        path_selector = RepresentativePathSelector()
         for iteration in range(simulation_input.iterations):
             iteration_seed = derive_child_seed(master_seed, "iteration", iteration)
             outcome = self._sim_one(
@@ -127,6 +134,11 @@ class MonteCarloEngine:
             for stage, reached_team_ids in outcome.reached_team_ids.items():
                 for team_id in reached_team_ids:
                     advancement_counts[stage][team_id] += 1
+            path_selector.observe(
+                outcome,
+                iteration_index=iteration,
+                iteration_seed=iteration_seed,
+            )
 
         total = max(simulation_input.iterations, 1)
         advancement_probs = {
@@ -170,15 +182,28 @@ class MonteCarloEngine:
         }
         top3 = [(entry["team"]["name"], entry["probability"]) for entry in top3_teams]
 
-        path_seed = derive_child_seed(master_seed, "temporary-path")
+        path_candidate = path_selector.for_champion(probability_leader_id)
         path_outcome = self._sim_one(
             team_ids,
             team_info,
-            KeyedRandom(path_seed),
+            KeyedRandom(path_candidate.iteration_seed),
             impacts,
             capture_path=True,
             team_by_id=public_teams,
         )
+        if path_outcome.champion_team_id != probability_leader_id:
+            raise RuntimeError(
+                "Representative path replay produced a different champion"
+            )
+
+        representative_path = {
+            "path_type": REPRESENTATIVE_PATH_TYPE,
+            "champion": public_teams[path_outcome.champion_team_id],
+            "iteration_index": path_candidate.iteration_index,
+            "iteration_seed": path_candidate.iteration_seed,
+            "log_likelihood": path_outcome.log_likelihood,
+            "stages": path_outcome.stages,
+        }
 
         result = {
             "simulation_id": uuid.uuid4().hex,
@@ -188,6 +213,7 @@ class MonteCarloEngine:
             "champion_probs_by_team_id": champion_probs_by_team_id,
             "probability_leader": probability_leader,
             "top3_teams": top3_teams,
+            "representative_path": representative_path,
             "champion_probs": probabilities,
             "top3": top3,
             "iterations": simulation_input.iterations,
@@ -238,6 +264,7 @@ class MonteCarloEngine:
         team_by_id: Optional[dict[int, dict]] = None,
     ):
         # Group record: [team_id, name, name_cn, elo, points, gf, ga, gd]
+        trace_log_likelihood = 0.0
         groups = {group: [] for group in GROUP_NAMES}
         for team_id in team_ids:
             name, name_cn, elo, group_name, _code = team_info[team_id]
@@ -276,6 +303,9 @@ class MonteCarloEngine:
                         second_index,
                         "away-goals",
                     )
+                    trace_log_likelihood += poisson_log_probability(
+                        home_goals, home_lambda
+                    ) + poisson_log_probability(away_goals, away_lambda)
                     if home_goals > away_goals:
                         home[4] += 3
                     elif away_goals > home_goals:
@@ -339,7 +369,7 @@ class MonteCarloEngine:
                 away_goals = random_source.poisson(
                     away_lambda, stage_name, match_index, "away-goals"
                 )
-                winner, decided_by = _knockout_winner(
+                winner, decided_by, decision_log_probability = _knockout_winner(
                     home,
                     away,
                     home_goals,
@@ -347,6 +377,11 @@ class MonteCarloEngine:
                     random_source,
                     stage_name,
                     match_index,
+                )
+                trace_log_likelihood += (
+                    poisson_log_probability(home_goals, home_lambda)
+                    + poisson_log_probability(away_goals, away_lambda)
+                    + decision_log_probability
                 )
                 match_key = f"{stage_name}-{match_index + 1}"
                 winners.append(
@@ -391,7 +426,7 @@ class MonteCarloEngine:
         )
         home_goals = random_source.poisson(home_lambda, "FINAL", 0, "home-goals")
         away_goals = random_source.poisson(away_lambda, "FINAL", 0, "away-goals")
-        winner, decided_by = _knockout_winner(
+        winner, decided_by, decision_log_probability = _knockout_winner(
             home,
             away,
             home_goals,
@@ -399,6 +434,11 @@ class MonteCarloEngine:
             random_source,
             "FINAL",
             0,
+        )
+        trace_log_likelihood += (
+            poisson_log_probability(home_goals, home_lambda)
+            + poisson_log_probability(away_goals, away_lambda)
+            + decision_log_probability
         )
         reached_team_ids["CHAMPION"] = (winner[0],)
         if capture_path and team_by_id is not None:
@@ -424,12 +464,14 @@ class MonteCarloEngine:
                 champion_team_id=winner[0],
                 champion_name=winner[1],
                 reached_team_ids=reached_team_ids,
+                log_likelihood=trace_log_likelihood,
                 stages=stages,
             )
         return TournamentOutcome(
             champion_team_id=winner[0],
             champion_name=winner[1],
             reached_team_ids=reached_team_ids,
+            log_likelihood=trace_log_likelihood,
         )
 
     @staticmethod

@@ -245,6 +245,12 @@ class TestBracketEndpoint:
         assert all(match["home_team"]["id"] > 0 for match in all_matches)
         assert all(match["away_team"]["id"] > 0 for match in all_matches)
         assert all(match["winner_team_id"] > 0 for match in all_matches)
+        assert body["representative_path"]["champion"]["id"] == body[
+            "probability_leader"
+        ]["team"]["id"]
+        assert body["stages"]["FINAL"]["matches"][0]["winner_team_id"] == body[
+            "probability_leader"
+        ]["team"]["id"]
         assert all(len(match["source_slots"]) == 2 for match in all_matches)
         assert all(
             source.startswith("GROUP_")

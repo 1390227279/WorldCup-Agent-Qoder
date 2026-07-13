@@ -80,6 +80,7 @@ class TournamentOutcome:
     champion_team_id: int
     champion_name: str
     reached_team_ids: dict[str, tuple[int, ...]]
+    log_likelihood: float
     stages: dict[str, dict] | None = None
 
 
@@ -222,7 +223,7 @@ class KeyedRandom:
         return (value + 0.5) / float(1 << 64)
 
     def poisson(self, expected_goals: float, *parts: object) -> int:
-        rate = max(MIN_EXPECTED_GOALS, min(MAX_EXPECTED_GOALS, expected_goals))
+        rate = clamp_expected_goals(expected_goals)
         uniform = self.uniform(*parts)
         probability = math.exp(-rate)
         cumulative = probability
@@ -232,3 +233,13 @@ class KeyedRandom:
             probability *= rate / goals
             cumulative += probability
         return goals
+
+
+def clamp_expected_goals(expected_goals: float) -> float:
+    return max(MIN_EXPECTED_GOALS, min(MAX_EXPECTED_GOALS, expected_goals))
+
+
+def poisson_log_probability(goals: int, expected_goals: float) -> float:
+    """Stable log probability for one sampled Poisson score."""
+    rate = clamp_expected_goals(expected_goals)
+    return goals * math.log(rate) - rate - math.lgamma(goals + 1)

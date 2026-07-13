@@ -141,3 +141,27 @@ def test_probability_leader_and_top3_use_id_based_champion_probabilities():
     assert leader["probability"] == max(result["champion_probs_by_team_id"].values())
     assert result["champion_probs_by_team_id"][leader_id] == leader["probability"]
     assert result["top3_teams"][0] == leader
+
+
+def test_representative_path_replays_once_and_uses_probability_leader():
+    class CountingEngine(MonteCarloEngine):
+        def __init__(self):
+            super().__init__()
+            self.simulation_calls = 0
+
+        def _sim_one(self, *args, **kwargs):
+            self.simulation_calls += 1
+            return super()._sim_one(*args, **kwargs)
+
+    engine = CountingEngine()
+    result = engine.run(_teams(), iterations=100, seed=77, force_refresh=True)
+    representative = result["representative_path"]
+
+    assert engine.simulation_calls == 101
+    assert representative["path_type"] == ("top_champion_highest_likelihood_sample")
+    assert (
+        representative["champion"]["id"] == result["probability_leader"]["team"]["id"]
+    )
+    assert result["predicted_champion"] == representative["champion"]["name"]
+    assert representative["stages"] == result["stages"]
+    assert representative["log_likelihood"] < 0

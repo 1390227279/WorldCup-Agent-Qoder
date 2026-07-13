@@ -135,7 +135,7 @@ function PredictionSummary({
         <div>
           <p className="text-xs text-[var(--color-text-muted)] mb-0.5">预测比分</p>
           <p className="text-2xl font-bold font-mono text-[var(--color-accent)]">
-            {prediction.predicted_score ?? "—"}
+            {prediction.predicted_score || "暂无比分"}
           </p>
         </div>
       </div>
@@ -242,7 +242,7 @@ function ReasoningChainView({
             {/* Step header */}
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs font-bold text-[var(--color-primary)]">
-                步骤 {step.step ?? i + 1}
+                步骤 {step.step_number > 0 ? step.step_number : i + 1}
               </span>
             </div>
 

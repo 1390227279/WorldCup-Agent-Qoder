@@ -89,6 +89,12 @@ class PredictionService:
             result = await self.agent.predict_match(home_team, away_team, db_session)
             elapsed = time.time() - t0
 
+            if result.is_valid and result.cleaned_data and not result.cleaned_data.predicted_score:
+                result.cleaned_data.predicted_score = await self._predict_fallback_score(
+                    home_team, away_team, db_session,
+                )
+                result.warnings.append("智能预测未返回有效比分，已使用统计模型补全")
+
             # AgentService 内部可能已经走了泊松降级（is_agent=False）
             if result.is_agent and result.is_valid:
                 self.breaker.record_success()
@@ -98,7 +104,10 @@ class PredictionService:
                     result.cleaned_data.winner if result.cleaned_data else "?",
                 )
             elif not result.is_agent:
-                # AgentService 内部已降级，不算 API 失败
+                if not result.is_valid or not result.cleaned_data:
+                    result = await self._fallback_to_poisson(
+                        home_team, away_team, db_session,
+                    )
                 logger.info(
                     "AgentService 内部已降级到泊松 (%.1fs): %s vs %s",
                     elapsed, home_team, away_team,
@@ -123,6 +132,23 @@ class PredictionService:
                 home_team, away_team, exc,
             )
             return await self._fallback_to_poisson(home_team, away_team, db_session)
+
+    async def _predict_fallback_score(
+        self,
+        home_team: str,
+        away_team: str,
+        db_session: AsyncSession,
+    ) -> str:
+        stmt = select(Team).where(Team.name.in_([home_team, away_team]))
+        rows = (await db_session.execute(stmt)).scalars().all()
+        teams_map = {team.name: team for team in rows}
+        home = teams_map.get(home_team)
+        away = teams_map.get(away_team)
+        home_elo = home.elo_rating if home and home.elo_rating else 1500.0
+        away_elo = away.elo_rating if away and away.elo_rating else 1500.0
+        return self.poisson.predict_score(
+            home_team, away_team, home_elo, away_elo,
+        ).most_likely_score
 
     async def _fallback_to_poisson(
         self,

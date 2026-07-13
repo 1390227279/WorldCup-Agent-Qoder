@@ -7,6 +7,7 @@ Agent 预测结果的 Pydantic 校验模块 —— 第二层容错防线。
 
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -234,11 +235,12 @@ def validate_prediction(data: PredictionInput) -> ValidationResult:
         if raw_score is None or raw_score.strip() == "":
             cleaned_score = ""
             warnings.append("predicted_score 缺失")
-        elif "-" not in raw_score:
-            cleaned_score = raw_score
+        elif not re.fullmatch(r"\d+\s*-\s*\d+", raw_score.strip()):
+            cleaned_score = ""
             warnings.append(f"predicted_score 格式异常: {raw_score}")
         else:
-            cleaned_score = raw_score
+            home_score, away_score = raw_score.split("-", 1)
+            cleaned_score = f"{int(home_score.strip())}-{int(away_score.strip())}"
 
         # ---------------------------------------------------------------
         # 汇总结果

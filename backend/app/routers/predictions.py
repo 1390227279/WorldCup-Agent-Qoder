@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.database import get_db
 from app.models.team import Team
+from app.schema.prediction_schema import ValidatedPrediction
 from app.services.prediction_service import PredictionService
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,20 @@ class MatchPredictRequest(BaseModel):
     away_team_id: int
     home_team_code: Optional[str] = None
     away_team_code: Optional[str] = None
+
+
+class MatchPredictionResponse(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
+    home_team: str
+    away_team: str
+    is_valid: bool
+    is_agent: bool
+    model_used: str
+    errors: list[str]
+    warnings: list[str]
+    prediction: Optional[ValidatedPrediction]
+    circuit_breaker: dict
 
 
 async def _resolve_team(
@@ -59,7 +74,7 @@ async def get_champion_prediction():
     return {"message": "Phase 4 implementation"}
 
 
-@router.post("/match")
+@router.post("/match", response_model=MatchPredictionResponse)
 async def predict_match(
     req: MatchPredictRequest,
     db: AsyncSession = Depends(get_db),

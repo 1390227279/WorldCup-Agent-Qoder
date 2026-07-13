@@ -546,16 +546,21 @@ class TestValidatePredictedScore:
         result = validate_prediction(_valid_input(predicted_score="3-2"))
         assert result.cleaned_data.predicted_score == "3-2"
 
+    def test_valid_score_is_normalized(self):
+        result = validate_prediction(_valid_input(predicted_score=" 03 - 02 "))
+        assert result.cleaned_data.predicted_score == "3-2"
+
     def test_no_dash_warning(self):
         result = validate_prediction(_valid_input(predicted_score="2:1"))
         assert result.is_valid is True  # not fatal
-        assert result.cleaned_data.predicted_score == "2:1"
+        assert result.cleaned_data.predicted_score == ""
         assert any("格式异常" in w for w in result.warnings)
 
     def test_score_never_fatal(self):
         """predicted_score 校验永远不会导致 is_valid=False。"""
         result = validate_prediction(_valid_input(predicted_score="garbage"))
         assert result.is_valid is True
+        assert result.cleaned_data.predicted_score == ""
 
 
 # ===========================================================================

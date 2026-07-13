@@ -618,7 +618,7 @@ class AgentService:
                             "description": "推理步骤链",
                         },
                     },
-                    "required": ["winner", "confidence", "key_factors", "reasoning_chain"],
+                    "required": ["winner", "predicted_score", "confidence", "key_factors", "reasoning_chain"],
                 },
             },
         }

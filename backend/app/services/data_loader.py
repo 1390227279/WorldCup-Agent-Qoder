@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.data_collection import DataCollectionRun
+from app.models.data_collection_change import DataCollectionChange
 from app.models.team import Team
 from app.services.data_parser import ParsedSnapshot, TeamMetricRecord
 from app.services.simulation_cache import get_simulation_cache
@@ -100,6 +101,7 @@ class DataLoaderService:
                     result.errors.append(
                         f"ELO 记录 {code}：数据库中无此球队，跳过"
                     )
+                    db.add(DataCollectionChange(run_id=run.id, record_type="TEAM_METRIC", fifa_code=code, field_name="elo_rating", new_value=str(record.value), change_status="SKIPPED", source_index=record.source_index, error_message="球队不存在"))
                     continue
 
                 if not (ELO_MIN <= record.value <= ELO_MAX):
@@ -110,7 +112,9 @@ class DataLoaderService:
                     )
                     continue
 
+                old_value = team.elo_rating
                 team.elo_rating = record.value
+                db.add(DataCollectionChange(run_id=run.id, record_type="TEAM_METRIC", team_id=team.id, fifa_code=code, field_name="elo_rating", old_value=str(old_value) if old_value is not None else None, new_value=str(record.value), change_status="UPDATED", source_index=record.source_index))
                 result.updated_team_count += 1
 
             except Exception as exc:

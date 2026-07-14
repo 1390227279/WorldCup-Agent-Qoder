@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.models import Base, DataCollectionRun, HistoricalMatch, Team
+from app.models import Base, DataCollectionChange, DataCollectionRun, HistoricalMatch, Team
 from app.services.data_parser import HistoricalMatchRecord, ParsedSnapshot
 from app.services.historical_match_loader import HistoricalMatchLoaderService
 
@@ -29,6 +29,7 @@ async def test_loader_inserts_and_deduplicates_matches(session):
     first = DataCollectionRun(source_name="openfootball", status="FETCHED"); session.add(first); await session.commit(); await session.refresh(first)
     result = await HistoricalMatchLoaderService().load(first, parsed(), session)
     assert result.inserted_match_count == 1 and first.status == "COMPLETED"
+    assert (await session.execute(select(func.count()).select_from(DataCollectionChange))).scalar_one() == 1
     second = DataCollectionRun(source_name="openfootball", status="FETCHED"); session.add(second); await session.commit(); await session.refresh(second)
     result = await HistoricalMatchLoaderService().load(second, parsed(), session)
     assert result.duplicate_match_count == 1

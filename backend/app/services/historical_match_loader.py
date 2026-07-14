@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.data_collection import DataCollectionRun
+from app.models.data_collection_change import DataCollectionChange
 from app.models.historical_match import HistoricalMatch
 from app.models.team import Team
 from app.services.data_parser import HistoricalMatchRecord, ParsedSnapshot
@@ -60,9 +61,11 @@ class HistoricalMatchLoaderService:
             if home is None or away is None:
                 result.unmatched_team_count += 1
                 result.errors.append(f"第 {record.source_index} 条：无法匹配 {record.home_fifa_code}/{record.away_fifa_code}")
+                db.add(DataCollectionChange(run_id=run.id, record_type="HISTORICAL_MATCH", fifa_code=record.home_fifa_code, change_status="SKIPPED", source_index=record.source_index, error_message=f"无法匹配 {record.home_fifa_code}/{record.away_fifa_code}"))
                 continue
             if fingerprint in existing:
                 result.duplicate_match_count += 1
+                db.add(DataCollectionChange(run_id=run.id, record_type="HISTORICAL_MATCH", fifa_code=record.home_fifa_code, field_name="match_fingerprint", new_value=fingerprint, change_status="DUPLICATE", source_index=record.source_index))
                 continue
             db.add(HistoricalMatch(
                 match_date=record.match_date, tournament=record.tournament, stage=record.stage,
@@ -73,6 +76,7 @@ class HistoricalMatchLoaderService:
                 external_match_id=str(record.source_index), match_fingerprint=fingerprint,
             ))
             existing.add(fingerprint)
+            db.add(DataCollectionChange(run_id=run.id, record_type="HISTORICAL_MATCH", team_id=home.id, fifa_code=record.home_fifa_code, field_name="match_fingerprint", new_value=fingerprint, change_status="INSERTED", source_index=record.source_index))
             result.inserted_match_count += 1
 
         run.inserted_record_count = result.inserted_match_count

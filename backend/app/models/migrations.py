@@ -19,6 +19,7 @@ TOURNAMENT_DOMAIN_MIGRATION_VERSION = "20260714_tournament_domain_v1"
 DATA_COLLECTION_LEDGER_MIGRATION_VERSION = "20260714_data_collection_ledger_v1"
 HISTORICAL_MATCHES_MIGRATION_VERSION = "20260715_historical_matches_v1"
 COLLECTION_COUNTERS_MIGRATION_VERSION = "20260715_collection_counters_v1"
+COLLECTION_CHANGES_MIGRATION_VERSION = "20260715_collection_changes_v1"
 
 def _migrate_event_metadata(connection) -> None:
     tables = set(inspect(connection).get_table_names())
@@ -195,6 +196,11 @@ def _migrate_collection_counters(connection) -> None:
                 f"ALTER TABLE data_collection_runs ADD COLUMN {name} INTEGER NOT NULL DEFAULT 0"
             ))
 
+def _migrate_collection_changes(connection) -> None:
+    connection.execute(text("CREATE TABLE IF NOT EXISTS data_collection_changes (id INTEGER PRIMARY KEY AUTOINCREMENT, run_id INTEGER NOT NULL REFERENCES data_collection_runs(id), record_type VARCHAR(50) NOT NULL, team_id INTEGER REFERENCES teams(id), fifa_code VARCHAR(3), field_name VARCHAR(100), old_value TEXT, new_value TEXT, change_status VARCHAR(30) NOT NULL, source_index INTEGER, error_message TEXT, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_data_collection_changes_run ON data_collection_changes (run_id)"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_data_collection_changes_team ON data_collection_changes (team_id)"))
+
 
 Migration = tuple[str, Callable]
 MIGRATIONS: tuple[Migration, ...] = (
@@ -203,6 +209,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     (DATA_COLLECTION_LEDGER_MIGRATION_VERSION, _migrate_data_collection_ledger),
     (HISTORICAL_MATCHES_MIGRATION_VERSION, _migrate_historical_matches),
     (COLLECTION_COUNTERS_MIGRATION_VERSION, _migrate_collection_counters),
+    (COLLECTION_CHANGES_MIGRATION_VERSION, _migrate_collection_changes),
 )
 MIGRATION_VERSIONS = tuple(version for version, _ in MIGRATIONS)
 

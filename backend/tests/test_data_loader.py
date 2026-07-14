@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.models import Base, DataCollectionRun, Team
+from app.models import Base, DataCollectionChange, DataCollectionRun, Team
 from app.services.data_loader import DataLoaderService
 from app.services.data_parser import DataParserService, ParsedSnapshot, TeamEloJsonParser
 
@@ -81,6 +81,8 @@ async def test_load_metrics_updates_elo_and_finalises_run(tmp_path, session):
     assert run.status == "COMPLETED"
     assert run.updated_team_count == 3
     assert run.raw_record_count == 3
+    changes = (await session.execute(select(DataCollectionChange))).scalars().all()
+    assert len(changes) == 3 and all(change.change_status == "UPDATED" for change in changes)
 
 
 @pytest.mark.asyncio

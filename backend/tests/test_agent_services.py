@@ -11,6 +11,7 @@ from app.schema.prediction_schema import (
     validate_agent_report,
 )
 from app.services.agent_service import AgentService
+from app.services.qwen_client import DashScopeResponse, ToolCall
 
 
 # ── CircuitBreaker ────────────────────────────────────────
@@ -117,3 +118,49 @@ class TestAgentReportContract:
         assert "winner" not in properties
         assert "predicted_score" not in properties
         assert "confidence" not in properties
+
+    @pytest.mark.asyncio
+    async def test_agent_prompt_requires_chinese_and_uses_chinese_team_names(self):
+        class CapturingQwenClient:
+            messages = None
+
+            async def chat_with_tools(self, messages, tools):
+                self.messages = messages
+                return DashScopeResponse(tool_calls=[ToolCall(
+                    id="submit-1",
+                    name="submit_match_analysis",
+                    arguments={
+                        "key_factors": ["阿根廷中场控制力更稳定"],
+                        "risk_notes": ["代表路径并非唯一比赛结果"],
+                        "reasoning_chain": [{
+                            "step_number": 1,
+                            "finding": "读取既有数学结果",
+                            "analysis": "仅解释结果，不修改比分。",
+                        }],
+                    },
+                )])
+
+        class EmptyToolRegistry:
+            @staticmethod
+            def get_tools():
+                return []
+
+        qwen_client = CapturingQwenClient()
+        service = AgentService(
+            qwen_client=qwen_client,
+            tool_registry=EmptyToolRegistry(),
+        )
+        result = await service.analyze_simulated_match({
+            "home_team": {"name": "Argentina", "name_cn": "阿根廷"},
+            "away_team": {"name": "Brazil", "name_cn": "巴西"},
+            "predicted_score": "2-1",
+        }, None)
+
+        assert result.is_valid is True
+        assert "所有面向用户的输出必须使用简体中文" in qwen_client.messages[0]["content"]
+        assert "请解释 阿根廷 对阵 巴西" in qwen_client.messages[1]["content"]
+
+        tool = service._submit_match_analysis_tool_def()
+        properties = tool["function"]["parameters"]["properties"]
+        assert properties["key_factors"]["items"]["description"] == "必须使用简体中文"
+        assert properties["reasoning_chain"]["items"]["properties"]["finding"]["description"] == "必须使用简体中文"

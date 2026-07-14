@@ -28,6 +28,8 @@ from app.services.tool_registry import ToolRegistry
 SIMULATED_MATCH_ANALYSIS_PROMPT = """你是一位足球战术分析员，负责解释已经由数学引擎确定的比赛推演结果。
 
 不可违反的约束：
+- 所有面向用户的输出必须使用简体中文，包括关键因素、风险提示、推理发现和分析文字。
+- 即使球队英文名、工具数据或历史比赛使用英文，也必须用中文组织结论；球队优先使用中文名称。
 - 输入中的球队、比分、胜者、胜率和预期进球 lambda 均为后端数学事实。
 - 不得重新预测、修改、纠正或否定这些数学事实。
 - 只能解释战术原因、关键因素和不确定性。
@@ -61,8 +63,14 @@ class AgentService:
         match_context: dict,
         db_session: AsyncSession,
     ) -> AgentReportValidationResult:
-        home_team = match_context["home_team"]["name"]
-        away_team = match_context["away_team"]["name"]
+        home_team = (
+            match_context["home_team"].get("name_cn")
+            or match_context["home_team"]["name"]
+        )
+        away_team = (
+            match_context["away_team"].get("name_cn")
+            or match_context["away_team"]["name"]
+        )
         messages = [
             {"role": "system", "content": SIMULATED_MATCH_ANALYSIS_PROMPT},
             {
@@ -263,11 +271,19 @@ class AgentService:
                     "properties": {
                         "key_factors": {
                             "type": "array",
-                            "items": {"type": "string"},
+                            "description": "3-5 条简体中文关键因素",
+                            "items": {
+                                "type": "string",
+                                "description": "必须使用简体中文",
+                            },
                         },
                         "risk_notes": {
                             "type": "array",
-                            "items": {"type": "string"},
+                            "description": "简体中文风险与边界说明",
+                            "items": {
+                                "type": "string",
+                                "description": "必须使用简体中文",
+                            },
                         },
                         "reasoning_chain": {
                             "type": "array",
@@ -276,8 +292,14 @@ class AgentService:
                                 "properties": {
                                     "step_number": {"type": "integer"},
                                     "tool_used": {"type": "string"},
-                                    "finding": {"type": "string"},
-                                    "analysis": {"type": "string"},
+                                    "finding": {
+                                        "type": "string",
+                                        "description": "必须使用简体中文",
+                                    },
+                                    "analysis": {
+                                        "type": "string",
+                                        "description": "必须使用简体中文",
+                                    },
                                 },
                                 "required": ["step_number", "finding"],
                             },

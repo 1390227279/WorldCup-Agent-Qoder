@@ -51,6 +51,8 @@ export const api = {
   getCollectionRuns: (limit = 20) => fetchJSON<import("../types").DataCollectionRun[]>(`/data-sources/collection-runs?limit=${limit}`),
   collectDataSource: (sourceId: string) => postJSON<import("../types").DataCollectionRun>(`/data-sources/collect/${encodeURIComponent(sourceId)}`),
   processCollectionRun: (runId: number) => postJSON<import("../types").DataCollectionProcessResult>(`/data-sources/process/${runId}`),
+  registerLocalElo: () => postJSON<import("../types").DataCollectionRun>("/data-sources/register-local-elo"),
+  getCollectionChanges: (runId: number) => fetchJSON<import("../types").DataCollectionChange[]>(`/data-sources/collection-runs/${runId}/changes`),
   // Teams
   getTeams: () => fetchJSON<import("../types").Team[]>("/teams"),
   getTeam: (id: number) =>

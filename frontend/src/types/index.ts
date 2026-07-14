@@ -341,6 +341,7 @@ export interface DataCollectionRun {
   id: number;
   source_name: string;
   source_url: string | null;
+  acquisition_method: string;
   started_at: string;
   completed_at: string | null;
   status: DataCollectionStatus;
@@ -349,6 +350,8 @@ export interface DataCollectionRun {
   snapshot_bytes: number | null;
   sha256_hash: string | null;
   raw_record_count: number;
+  inserted_record_count: number;
+  duplicate_record_count: number;
   updated_team_count: number;
   skipped_team_count: number;
   error_message: string | null;
@@ -364,10 +367,18 @@ export interface DataCollectionProcessResult {
   run_id: number;
   status: DataCollectionStatus;
   raw_record_count: number;
+  inserted_record_count: number;
+  duplicate_record_count: number;
   updated_team_count: number;
   skipped_team_count: number;
   errors: string[];
   message: string;
+}
+
+export interface DataCollectionChange {
+  id: number; run_id: number; record_type: string; team_id: number | null; fifa_code: string | null;
+  field_name: string | null; old_value: string | null; new_value: string | null;
+  change_status: string; source_index: number | null; error_message: string | null; created_at: string;
 }
 
 export interface MatchOutcomeProbabilities {

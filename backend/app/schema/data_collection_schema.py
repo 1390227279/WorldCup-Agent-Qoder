@@ -45,3 +45,9 @@ class DataCollectionProcessResponse(BaseModel):
     skipped_team_count: int = Field(ge=0)
     errors: list[str] = Field(default_factory=list)
     message: str
+
+class DataCollectionChangeResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int; run_id: int; record_type: str; team_id: int | None; fifa_code: str | None
+    field_name: str | None; old_value: str | None; new_value: str | None
+    change_status: str; source_index: int | None; error_message: str | None; created_at: datetime

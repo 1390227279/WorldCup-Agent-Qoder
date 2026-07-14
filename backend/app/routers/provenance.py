@@ -3,8 +3,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.data_collection import DataCollectionRun
+from app.models.data_collection_change import DataCollectionChange
 from app.models.database import get_db
-from app.schema.data_collection_schema import DataCollectionProcessResponse, DataCollectionRunResponse, DataCollectionSourceResponse
+from app.schema.data_collection_schema import DataCollectionChangeResponse, DataCollectionProcessResponse, DataCollectionRunResponse, DataCollectionSourceResponse
 from app.schema.provenance_schema import DataProvenanceResponse
 from app.services.data_fetcher import DataFetchError, DataFetcherService
 from app.services.data_pipeline import DataPipelineService
@@ -24,6 +25,11 @@ async def list_fetch_sources():
 @router.get("/collection-runs", response_model=list[DataCollectionRunResponse])
 async def list_collection_runs(limit: int = Query(20, ge=1, le=100), db: AsyncSession = Depends(get_db)):
     return list((await db.execute(select(DataCollectionRun).order_by(DataCollectionRun.id.desc()).limit(limit))).scalars())
+
+@router.get("/collection-runs/{run_id}/changes", response_model=list[DataCollectionChangeResponse])
+async def list_collection_changes(run_id: int, db: AsyncSession = Depends(get_db)):
+    if await db.get(DataCollectionRun, run_id) is None: raise HTTPException(status_code=404, detail="采集运行不存在")
+    return list((await db.execute(select(DataCollectionChange).where(DataCollectionChange.run_id == run_id).order_by(DataCollectionChange.id))).scalars())
 
 @router.post("/collect/{source_id}", response_model=DataCollectionRunResponse)
 async def collect_source(source_id: str, db: AsyncSession = Depends(get_db)):

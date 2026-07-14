@@ -677,6 +677,20 @@ class TestBracketEndpoint:
         assert scenario_body["model"]["seed"] == baseline_body["model"]["seed"]
         assert scenario_body["scenario"]["type"] == "EVENT"
 
+    async def test_data_sources_expose_verifiable_snapshot_and_transparency_notice(self, client):
+        response = await client.get("/api/v1/data-sources")
+        assert response.status_code == 200
+        body = response.json()
+        scenario = next(source for source in body["sources"] if source["id"] == "scenario_participants")
+        assert scenario["verification_status"] == "VERIFIED_LOCAL"
+        assert scenario["record_count"] == 48
+        assert len(scenario["snapshot_sha256"]) == 64
+        assert scenario["snapshot_bytes"] > 0
+        assert scenario["is_official"] is False
+        assert "非官方" in body["transparency_notice"]
+        assert any(source["is_official"] for source in body["sources"])
+        assert any(source["verification_status"] == "PENDING_NETWORK_REFRESH" for source in body["sources"])
+
     async def test_tournament_report_uses_complete_simulation_context(self, client, monkeypatch):
         from app.routers import predictions as predictions_router
         from app.services.prediction_service import PredictionService

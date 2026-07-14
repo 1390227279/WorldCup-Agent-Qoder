@@ -31,10 +31,20 @@ function EventsIcon() {
   );
 }
 
+function DataIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 fill-none stroke-current" strokeWidth="1.8">
+      <ellipse cx="12" cy="5" rx="7.5" ry="2.8" />
+      <path d="M4.5 5v7c0 1.6 3.4 2.8 7.5 2.8s7.5-1.2 7.5-2.8V5M4.5 12v7c0 1.6 3.4 2.8 7.5 2.8s7.5-1.2 7.5-2.8v-7" />
+    </svg>
+  );
+}
+
 const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "预测总览", icon: <HomeIcon /> },
   { to: "/bracket", label: "淘汰赛推演", icon: <BracketIcon /> },
   { to: "/admin/events", label: "赛事事件", icon: <EventsIcon /> },
+  { to: "/data-sources", label: "数据证据", icon: <DataIcon /> },
 ];
 
 function navClassName({ isActive }: { isActive: boolean }) {

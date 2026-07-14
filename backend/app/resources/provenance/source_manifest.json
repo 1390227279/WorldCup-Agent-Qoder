@@ -1,0 +1,70 @@
+{
+  "version": "2026-07-14-v1",
+  "sources": [
+    {
+      "id": "scenario_participants",
+      "name": "2026 世界杯情景参赛阵容",
+      "category": "TOURNAMENT_SCENARIO",
+      "provider": "项目情景数据",
+      "source_url": null,
+      "local_path": "tournaments/world_cup_2026.json",
+      "acquisition_method": "REPOSITORY_SNAPSHOT",
+      "verification_status": "VERIFIED_LOCAL",
+      "used_by": ["参赛球队", "小组分组", "ELO 初始值"],
+      "is_official": false,
+      "notice": "该 48 队阵容用于产品情景推演，不代表 FIFA 官方最终参赛名单。"
+    },
+    {
+      "id": "openfootball_history",
+      "name": "世界杯历史比赛开放数据",
+      "category": "HISTORICAL_MATCHES",
+      "provider": "openfootball",
+      "source_url": "https://github.com/openfootball/worldcup",
+      "local_path": null,
+      "acquisition_method": "PUBLIC_REPOSITORY_REFERENCE",
+      "verification_status": "PENDING_NETWORK_REFRESH",
+      "used_by": ["历史比赛工具", "交锋与近期状态解释"],
+      "is_official": false,
+      "notice": "开放社区数据源；联网刷新后应保存原始快照与校验值。"
+    },
+    {
+      "id": "world_football_elo",
+      "name": "World Football Elo Ratings",
+      "category": "TEAM_STRENGTH",
+      "provider": "eloratings.net",
+      "source_url": "https://www.eloratings.net/",
+      "local_path": null,
+      "acquisition_method": "PUBLIC_WEB_REFERENCE",
+      "verification_status": "PENDING_NETWORK_REFRESH",
+      "used_by": ["ELO 方法参考", "球队实力基线"],
+      "is_official": false,
+      "notice": "独立 ELO 数据源，并非 FIFA 官方排名。"
+    },
+    {
+      "id": "fifa_mens_ranking",
+      "name": "FIFA 男足世界排名",
+      "category": "OFFICIAL_RANKING",
+      "provider": "FIFA",
+      "source_url": "https://inside.fifa.com/fifa-world-ranking/men",
+      "local_path": null,
+      "acquisition_method": "OFFICIAL_WEB_REFERENCE",
+      "verification_status": "PENDING_NETWORK_REFRESH",
+      "used_by": ["排名交叉验证", "Agent 排名解释"],
+      "is_official": true,
+      "notice": "官方排名页面；当前仓库未伪装为已抓取的最新排名快照。"
+    },
+    {
+      "id": "fifa_world_cup_2026",
+      "name": "FIFA 2026 世界杯官方赛事页",
+      "category": "TOURNAMENT_RULES",
+      "provider": "FIFA",
+      "source_url": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026",
+      "local_path": null,
+      "acquisition_method": "OFFICIAL_WEB_REFERENCE",
+      "verification_status": "PENDING_NETWORK_REFRESH",
+      "used_by": ["赛事信息核验", "赛制说明"],
+      "is_official": true,
+      "notice": "官方赛事入口；项目淘汰赛配对规则仍是可解释的产品情景规则。"
+    }
+  ]
+}

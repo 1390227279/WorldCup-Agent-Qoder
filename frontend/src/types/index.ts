@@ -319,6 +319,22 @@ export interface TournamentReportResponse {
   circuit_breaker: Record<string, unknown>;
 }
 
+export interface DataSourceEvidence {
+  id: string; name: string; category: string; provider: string;
+  source_url: string | null; local_path: string | null;
+  acquisition_method: string;
+  verification_status: "VERIFIED_LOCAL" | "PENDING_NETWORK_REFRESH";
+  used_by: string[]; is_official: boolean; notice: string;
+  snapshot_sha256: string | null; snapshot_bytes: number | null;
+  record_count: number | null; snapshot_modified_at: string | null;
+}
+
+export interface DataProvenanceResponse {
+  manifest_version: string; generated_at: string; transparency_notice: string;
+  verified_local_sources: number; pending_network_sources: number;
+  sources: DataSourceEvidence[];
+}
+
 export interface MatchOutcomeProbabilities {
   home_win: number;
   draw: number;

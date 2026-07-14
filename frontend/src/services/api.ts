@@ -46,6 +46,7 @@ async function postJSON<T>(url: string, body?: unknown): Promise<T> {
 }
 
 export const api = {
+  getDataSources: () => fetchJSON<import("../types").DataProvenanceResponse>("/data-sources"),
   // Teams
   getTeams: () => fetchJSON<import("../types").Team[]>("/teams"),
   getTeam: (id: number) =>

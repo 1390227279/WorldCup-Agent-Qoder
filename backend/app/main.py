@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.models import init_db
-from app.routers import teams, predictions, bracket, events
+from app.routers import teams, predictions, bracket, events, provenance
 
 
 @asynccontextmanager
@@ -38,6 +38,7 @@ app.include_router(teams.router, prefix="/api/v1/teams", tags=["teams"])
 app.include_router(predictions.router, prefix="/api/v1/predictions", tags=["predictions"])
 app.include_router(bracket.router, prefix="/api/v1/bracket", tags=["bracket"])
 app.include_router(events.router, prefix="/api/v1/events", tags=["events"])
+app.include_router(provenance.router, prefix="/api/v1/data-sources", tags=["data-sources"])
 
 
 @app.get("/api/v1/health")

@@ -31,6 +31,7 @@ from app.services.tournament_rules import (
     GroupStanding,
     build_round_of_32_pairings,
     rank_group,
+    select_knockout_qualifiers,
 )
 
 
@@ -214,6 +215,7 @@ class MonteCarloEngine:
             "iteration_index": path_candidate.iteration_index,
             "iteration_seed": path_candidate.iteration_seed,
             "log_likelihood": path_outcome.log_likelihood,
+            "group_stage": path_outcome.group_stage,
             "stages": path_outcome.stages,
         }
 
@@ -272,11 +274,13 @@ class MonteCarloEngine:
         # Group record: [team_id, name, name_cn, elo, points, gf, ga, gd]
         trace_log_likelihood = 0.0
         groups = {group: [] for group in GROUP_NAMES}
+        group_matches: dict[str, list[dict]] = {group: [] for group in GROUP_NAMES}
         for team_id in team_ids:
             name, name_cn, elo, group_name, _code = team_info[team_id]
             groups[group_name].append([team_id, name, name_cn, elo, 0, 0, 0, 0])
 
         for group_name, group_records in groups.items():
+            group_index = GROUP_NAMES.index(group_name)
             for first_index in range(4):
                 first = group_records[first_index]
                 for second_index in range(first_index + 1, 4):
@@ -325,6 +329,30 @@ class MonteCarloEngine:
                     away[5] += away_goals
                     away[6] += home_goals
                     away[7] = away[5] - away[6]
+                    if capture_path and team_by_id is not None:
+                        group_matches[group_name].append({
+                            "id": -(10_000 + group_index * 10 + len(group_matches[group_name]) + 1),
+                            "match_key": f"GROUP-{group_name}-{len(group_matches[group_name]) + 1}",
+                            "stage": "GROUP",
+                            "round_name": f"{group_name} 组",
+                            "group_name": group_name,
+                            "home_team": team_by_id[home[0]],
+                            "away_team": team_by_id[away[0]],
+                            "home_score": home_goals,
+                            "away_score": away_goals,
+                            "winner_team_id": (
+                                home[0] if home_goals > away_goals
+                                else away[0] if away_goals > home_goals
+                                else None
+                            ),
+                            "winner": (
+                                home[1] if home_goals > away_goals
+                                else away[1] if away_goals > home_goals
+                                else "平局"
+                            ),
+                            "is_simulated": True,
+                            "match_order": len(group_matches[group_name]),
+                        })
 
         group_rankings = {}
         for group_name in GROUP_NAMES:
@@ -341,11 +369,40 @@ class MonteCarloEngine:
                 for record in groups[group_name]
             )
 
+        winners, runners_up, best_thirds = select_knockout_qualifiers(
+            group_rankings
+        )
         round_of_32 = build_round_of_32_pairings(group_rankings)
         current = [
             slot for pairing in round_of_32 for slot in (pairing.home, pairing.away)
         ]
         reached_team_ids = {"R32": tuple(slot.team_id for slot in current)}
+        group_stage = None
+        if capture_path and team_by_id is not None:
+            qualification_by_team_id = {
+                **{team.team_id: "GROUP_WINNER" for team in winners.values()},
+                **{team.team_id: "RUNNER_UP" for team in runners_up.values()},
+                **{team.team_id: "BEST_THIRD" for team in best_thirds},
+            }
+            group_stage = {
+                group_name: {
+                    "label": f"{group_name} 组",
+                    "matches": group_matches[group_name],
+                    "standings": [
+                        self._group_standing_row(
+                            qualified,
+                            position,
+                            team_by_id,
+                            group_matches[group_name],
+                            qualification_by_team_id.get(qualified.team_id),
+                        )
+                        for position, qualified in enumerate(
+                            group_rankings[group_name], start=1
+                        )
+                    ],
+                }
+                for group_name in GROUP_NAMES
+            }
         stages: dict[str, dict] = {}
         stage_names = ["R32", "R16", "QF", "SF"]
         next_stage = {"R32": "R16", "R16": "QF", "QF": "SF", "SF": "FINAL"}
@@ -472,6 +529,7 @@ class MonteCarloEngine:
                 reached_team_ids=reached_team_ids,
                 log_likelihood=trace_log_likelihood,
                 stages=stages,
+                group_stage=group_stage,
             )
         return TournamentOutcome(
             champion_team_id=winner[0],
@@ -479,6 +537,44 @@ class MonteCarloEngine:
             reached_team_ids=reached_team_ids,
             log_likelihood=trace_log_likelihood,
         )
+
+    @staticmethod
+    def _group_standing_row(
+        qualified,
+        position: int,
+        team_by_id: dict[int, dict],
+        matches: list[dict],
+        qualification_type: str | None,
+    ) -> dict:
+        wins = draws = losses = 0
+        for match in matches:
+            if qualified.team_id not in {
+                match["home_team"]["id"], match["away_team"]["id"]
+            }:
+                continue
+            if match["winner_team_id"] is None:
+                draws += 1
+            elif match["winner_team_id"] == qualified.team_id:
+                wins += 1
+            else:
+                losses += 1
+        standing = qualified.standing
+        goals_against = standing.goals_for - standing.goal_difference
+        return {
+            "position": position,
+            "team_id": qualified.team_id,
+            "team": team_by_id[qualified.team_id],
+            "played": wins + draws + losses,
+            "wins": wins,
+            "draws": draws,
+            "losses": losses,
+            "goals_for": standing.goals_for,
+            "goals_against": goals_against,
+            "goal_difference": standing.goal_difference,
+            "points": standing.points,
+            "qualified": qualification_type is not None,
+            "qualification_type": qualification_type,
+        }
 
     @staticmethod
     def _match_lambdas(home, away, team_info, team_impacts):

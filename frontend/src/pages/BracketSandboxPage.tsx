@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import BracketTree from "../components/BracketTree";
+import GroupStagePanel from "../components/GroupStagePanel";
 import MatchAnalysisPanel from "../components/MatchAnalysisPanel";
 import ScenarioSlider from "../components/ScenarioSlider";
 import { usePredictions } from "../hooks/usePredictions";
@@ -19,6 +20,7 @@ const IGNORED_REASON_LABELS: Record<string, string> = {
 };
 
 export default function BracketSandboxPage() {
+  const [viewMode, setViewMode] = useState<"groups" | "knockout">("groups");
   const [selectedEventIds, setSelectedEventIds] = useState<number[]>([]);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const [scenarioSimulation, setScenarioSimulation] = useState<SimulationResult | null>(null);
@@ -197,6 +199,11 @@ export default function BracketSandboxPage() {
 
       <div className="min-w-0">
         <section className="dashboard-card relative min-w-0 overflow-hidden p-3 sm:p-4">
+          <div className="mb-4 flex items-center gap-2 border-b border-[var(--color-border)] pb-3">
+            <button type="button" onClick={() => setViewMode("groups")} className={`rounded-md px-4 py-2 text-sm font-semibold transition-colors ${viewMode === "groups" ? "bg-[var(--color-primary)] text-[#1c1d21]" : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-raised)] hover:text-white"}`}>小组赛预测</button>
+            <button type="button" onClick={() => setViewMode("knockout")} className={`rounded-md px-4 py-2 text-sm font-semibold transition-colors ${viewMode === "knockout" ? "bg-[var(--color-primary)] text-[#1c1d21]" : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-raised)] hover:text-white"}`}>淘汰赛路径</button>
+            <span className="ml-auto hidden text-xs text-[var(--color-text-muted)] sm:inline">同一代表路径下的小组赛与淘汰赛结果</span>
+          </div>
           {isLoading && <div className="flex min-h-[520px] items-center justify-center text-sm text-[var(--color-text-muted)]">正在加载淘汰赛数据…</div>}
           {error && (
             <div className="flex min-h-[520px] items-center justify-center text-center">
@@ -210,7 +217,11 @@ export default function BracketSandboxPage() {
           {!error && !isLoading && (
             <>
               {isFetching && <span className="absolute right-4 top-4 z-10 text-xs text-[var(--color-text-muted)]">刷新中…</span>}
-              <BracketTree stages={simulation?.representative_path.stages ?? null} eventInfluenced={simulation?.scenario.type === "EVENT"} selectedMatchKey={selectedMatch?.match_key ?? null} onMatchClick={handleMatchClick} />
+              {viewMode === "groups" ? (
+                <GroupStagePanel groups={simulation?.representative_path.group_stage ?? null} />
+              ) : (
+                <BracketTree stages={simulation?.representative_path.stages ?? null} eventInfluenced={simulation?.scenario.type === "EVENT"} selectedMatchKey={selectedMatch?.match_key ?? null} onMatchClick={handleMatchClick} />
+              )}
             </>
           )}
         </section>

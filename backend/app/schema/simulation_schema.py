@@ -44,6 +44,50 @@ class SimulationStage(BaseModel):
     matches: list[SimulationMatch]
 
 
+class GroupStageMatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    match_key: str
+    stage: Literal["GROUP"]
+    round_name: str
+    group_name: str
+    home_team: SimulationTeam
+    away_team: SimulationTeam
+    home_score: int
+    away_score: int
+    winner_team_id: int | None
+    winner: str
+    is_simulated: bool
+    match_order: int
+
+
+class GroupStandingRow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    position: int
+    team_id: int
+    team: SimulationTeam
+    played: int
+    wins: int
+    draws: int
+    losses: int
+    goals_for: int
+    goals_against: int
+    goal_difference: int
+    points: int
+    qualified: bool
+    qualification_type: Literal["GROUP_WINNER", "RUNNER_UP", "BEST_THIRD"] | None
+
+
+class GroupStageGroup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    matches: list[GroupStageMatch]
+    standings: list[GroupStandingRow]
+
+
 class AdvancementProbability(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -149,6 +193,7 @@ class RepresentativePath(BaseModel):
     iteration_index: int
     iteration_seed: int
     log_likelihood: float
+    group_stage: dict[str, GroupStageGroup]
     stages: dict[str, SimulationStage]
 
 

@@ -493,6 +493,18 @@ class TestBracketEndpoint:
         assert body["model"]["seed"] > 0
         assert body["scenario"]["requested_event_ids"] == []
         stages = body["representative_path"]["stages"]
+        group_stage = body["representative_path"]["group_stage"]
+        assert set(group_stage) == set("ABCDEFGHIJKL")
+        assert all(len(group["matches"]) == 6 for group in group_stage.values())
+        assert all(len(group["standings"]) == 4 for group in group_stage.values())
+        assert all(
+            match["winner_team_id"] is None
+            or match["winner_team_id"] in {
+                match["home_team"]["id"], match["away_team"]["id"]
+            }
+            for group in group_stage.values()
+            for match in group["matches"]
+        )
         assert {stage: len(stages[stage]["matches"]) for stage in ("R32", "R16", "QF", "SF", "FINAL")} == {
             "R32": 16, "R16": 8, "QF": 4, "SF": 2, "FINAL": 1,
         }

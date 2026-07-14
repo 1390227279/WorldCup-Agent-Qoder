@@ -83,6 +83,7 @@ class TournamentOutcome:
     reached_team_ids: dict[str, tuple[int, ...]]
     log_likelihood: float
     stages: dict[str, dict] | None = None
+    group_stage: dict[str, dict] | None = None
 
 
 @dataclass(frozen=True, slots=True)

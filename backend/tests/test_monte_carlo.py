@@ -163,3 +163,50 @@ def test_representative_path_replays_once_and_uses_probability_leader():
     )
     assert representative["stages"]["FINAL"]["matches"][0]["winner_team_id"] == representative["champion"]["id"]
     assert representative["log_likelihood"] < 0
+
+
+def test_representative_path_contains_complete_group_stage_results():
+    result = MonteCarloEngine().run(
+        _teams(), iterations=100, seed=20260713, force_refresh=True
+    )
+    group_stage = result["representative_path"]["group_stage"]
+
+    assert tuple(group_stage) == tuple("ABCDEFGHIJKL")
+    assert all(len(group["matches"]) == 6 for group in group_stage.values())
+    assert all(len(group["standings"]) == 4 for group in group_stage.values())
+    assert all(
+        row["played"] == 3
+        for group in group_stage.values()
+        for row in group["standings"]
+    )
+    assert all(
+        row["points"] == row["wins"] * 3 + row["draws"]
+        for group in group_stage.values()
+        for row in group["standings"]
+    )
+    qualification_counts = {
+        qualification_type: sum(
+            row["qualification_type"] == qualification_type
+            for group in group_stage.values()
+            for row in group["standings"]
+        )
+        for qualification_type in ("GROUP_WINNER", "RUNNER_UP", "BEST_THIRD")
+    }
+    assert qualification_counts == {
+        "GROUP_WINNER": 12,
+        "RUNNER_UP": 12,
+        "BEST_THIRD": 8,
+    }
+    assert all(
+        [
+            (row["points"], row["goal_difference"], row["goals_for"], row["team"]["elo_rating"], -row["team_id"])
+            for row in group["standings"]
+        ] == sorted(
+            [
+                (row["points"], row["goal_difference"], row["goals_for"], row["team"]["elo_rating"], -row["team_id"])
+                for row in group["standings"]
+            ],
+            reverse=True,
+        )
+        for group in group_stage.values()
+    )

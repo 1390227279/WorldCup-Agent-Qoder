@@ -38,7 +38,7 @@ export interface Match {
   is_simulated: boolean;
   match_order?: number | null;
   match_key?: string;
-  winner_team_id?: number;
+  winner_team_id?: number | null;
   winner?: string;
   source_slots?: string[];
   decided_by?: "REGULAR_TIME" | "PENALTIES";
@@ -226,7 +226,42 @@ export interface RepresentativePath {
   iteration_index: number;
   iteration_seed: number;
   log_likelihood: number;
+  group_stage: Record<string, GroupStageGroup>;
   stages: Record<string, BracketStage>;
+}
+
+export interface GroupStageMatch extends Match {
+  stage: "GROUP";
+  group_name: string;
+  home_team: Team;
+  away_team: Team;
+  home_score: number;
+  away_score: number;
+  winner_team_id: number | null;
+  match_key: string;
+  match_order: number;
+}
+
+export interface GroupStandingRow {
+  position: number;
+  team_id: number;
+  team: Team;
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goals_for: number;
+  goals_against: number;
+  goal_difference: number;
+  points: number;
+  qualified: boolean;
+  qualification_type: "GROUP_WINNER" | "RUNNER_UP" | "BEST_THIRD" | null;
+}
+
+export interface GroupStageGroup {
+  label: string;
+  matches: GroupStageMatch[];
+  standings: GroupStandingRow[];
 }
 
 export interface SimulationResult {

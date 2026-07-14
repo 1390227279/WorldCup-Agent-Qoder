@@ -3,6 +3,7 @@
 提供对阵树结构和单队晋级路径查询。
 """
 
+import copy
 import logging
 import uuid
 
@@ -26,6 +27,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _scenario_label(scenario_type: str, scenario: ScenarioResolution) -> str:
+    if scenario_type == "BASELINE":
+        return "基础实力基线（不含事件）"
+    if scenario.math_events:
+        return "当前事件情景"
+    if scenario.narrative_events:
+        return "当前 AI 解读上下文（数学基线不变）"
+    return "所选事件未应用（数学基线不变）"
+
+
 def _build_simulation_response(
     *,
     engine_result: dict,
@@ -41,7 +52,7 @@ def _build_simulation_response(
         "baseline_simulation_id": baseline_simulation_id,
         "scenario": {
             "type": scenario_type,
-            "label": "基础实力基线（不含事件）" if scenario_type == "BASELINE" else "当前事件情景",
+            "label": _scenario_label(scenario_type, scenario),
             **audit,
         },
         "tournament": {
@@ -204,6 +215,19 @@ async def get_simulation_results(
     )
     if cached_scenario is not None:
         return cached_scenario.response
+
+    if not scenario.team_impacts:
+        response = copy.deepcopy(baseline_record.response)
+        response["simulation_id"] = uuid.uuid4().hex
+        response["baseline_simulation_id"] = baseline_record.simulation_id
+        response["scenario"] = {
+            "type": "EVENT",
+            "label": _scenario_label("EVENT", scenario),
+            **scenario.audit_dict(),
+        }
+        response = SimulationResponse.model_validate(response).model_dump()
+        cache.store_scenario(context_key, response)
+        return response
 
     response = compute_response(
         master_seed=baseline_record.seed,

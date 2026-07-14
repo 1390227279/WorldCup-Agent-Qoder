@@ -83,9 +83,9 @@ async def test_resolver_filters_events_clamps_totals_and_preserves_elo():
         "attack_lambda_delta": 0.4,
         "concede_lambda_delta": 0.1,
     }
-    assert len(resolution.applied_events) == 3
+    assert len(resolution.math_events) == 3
+    assert [event.title for event in resolution.narrative_events] == ["仅文本影响"]
     assert {ignored.reason for ignored in resolution.ignored_events} == {
-        "no_lambda_impact",
         "inactive",
         "not_effective",
         "expired",

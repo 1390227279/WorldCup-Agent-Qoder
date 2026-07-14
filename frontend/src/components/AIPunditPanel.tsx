@@ -80,12 +80,22 @@ function MathSummary({ match, math }: { match: Match; math?: MatchMathContext })
             <span>{teamName(math.home_team)} λ {math.home_lambda.toFixed(2)}</span>
             <span>{teamName(math.away_team)} λ {math.away_lambda.toFixed(2)}</span>
           </div>
-          {math.applied_events.length > 0 && (
+          {math.math_events.length > 0 && (
             <div className="mt-3 rounded-lg bg-[var(--color-gold)]/10 p-2 text-xs">
-              <p className="mb-1 font-semibold text-[var(--color-gold)]">本场已应用事件</p>
-              {math.applied_events.map((event) => (
+              <p className="mb-1 font-semibold text-[var(--color-gold)]">本场数学影响事件</p>
+              {math.math_events.map((event) => (
                 <p key={event.event_id} className="text-[var(--color-text-muted)]">
                   · {event.title}
+                </p>
+              ))}
+            </div>
+          )}
+          {math.narrative_events.length > 0 && (
+            <div className="mt-3 rounded-lg border border-dashed border-white/20 bg-transparent p-2 text-xs">
+              <p className="mb-1 font-semibold">本场 AI 解读背景</p>
+              {math.narrative_events.map((event) => (
+                <p key={event.event_id} className="text-[var(--color-text-muted)]">
+                  · {event.title}（不影响数学胜率）
                 </p>
               ))}
             </div>

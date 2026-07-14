@@ -116,6 +116,8 @@ class TestEventsEndpoint:
         })
         assert created.status_code == 200
         assert created.json()["impact"] == {"attack_lambda_delta": -0.05}
+        assert created.json()["impact_mode"] == "MATH"
+        assert created.json()["affects_probability"] is True
         event_id = created.json()["id"]
 
         after_create = await client.get("/api/v1/bracket/simulation?iterations=100")
@@ -144,6 +146,41 @@ class TestEventsEndpoint:
         deleted = await client.delete(f"/api/v1/events/{event_id}")
         assert deleted.status_code == 200
         assert deleted.json()["deleted"] is True
+
+    async def test_event_impact_modes_are_explicit_and_validated(self, client):
+        narrative = await client.post("/api/v1/events", json={
+            "team_id": 1,
+            "type": "MORALE",
+            "title": "主场叙事背景",
+            "severity": "MINOR",
+            "impact": {"team_morale": 0.1},
+            "impact_mode": "NARRATIVE",
+        })
+        assert narrative.status_code == 200
+        assert narrative.json()["impact_mode"] == "NARRATIVE"
+        assert narrative.json()["affects_probability"] is False
+
+        empty_math = await client.post("/api/v1/events", json={
+            "team_id": 1,
+            "type": "TACTICAL",
+            "title": "缺少数学修正",
+            "severity": "MINOR",
+            "impact": {},
+            "impact_mode": "MATH",
+        })
+        assert empty_math.status_code == 400
+        assert "非零进球期望修正" in empty_math.json()["detail"]
+
+        narrative_with_lambda = await client.post("/api/v1/events", json={
+            "team_id": 1,
+            "type": "TACTICAL",
+            "title": "叙事事件错误携带数学修正",
+            "severity": "MINOR",
+            "impact": {"attack_lambda_delta": 0.1},
+            "impact_mode": "NARRATIVE",
+        })
+        assert narrative_with_lambda.status_code == 400
+        assert "不能包含非零" in narrative_with_lambda.json()["detail"]
 
     async def test_event_csv_import_is_validated_and_deduplicated(self, client):
         template = await client.get("/api/v1/events/import/template")
@@ -435,7 +472,7 @@ class TestPredictionsEndpoint:
         assert response.status_code == 200
         math_context = response.json()["math"]
         assert math_context["scenario_type"] == "EVENT"
-        assert [item["title"] for item in math_context["applied_events"]] == [
+        assert [item["title"] for item in math_context["math_events"]] == [
             "单场上下文事件"
         ]
 
@@ -521,10 +558,64 @@ class TestBracketEndpoint:
             "attack_lambda_delta": -0.1,
             "concede_lambda_delta": 0.0,
         }
-        assert [event["event_id"] for event in body["scenario"]["applied_events"]] == [event_id]
+        assert [event["event_id"] for event in body["scenario"]["math_events"]] == [event_id]
         assert body["scenario"]["ignored_events"] == [
             {"event_id": 999999, "reason": "not_found"}
         ]
+
+    async def test_narrative_only_scenario_reuses_baseline_and_reaches_match_ai_context(
+        self,
+        client,
+        monkeypatch,
+    ):
+        baseline = await client.get(
+            "/api/v1/bracket/simulation?iterations=100&seed=24680"
+        )
+        baseline_body = baseline.json()
+        match = baseline_body["representative_path"]["stages"]["R32"]["matches"][0]
+        team = match["home_team"]
+        event = await client.post("/api/v1/events", json={
+            "team_id": team["id"],
+            "type": "MORALE",
+            "title": "仅供 AI 解读的背景",
+            "description": "不会改变客观胜率模型",
+            "severity": "MINOR",
+            "impact": {"team_morale": 0.1},
+            "impact_mode": "NARRATIVE",
+        })
+        event_id = event.json()["id"]
+
+        class FailingEngine:
+            def run(self, *args, **kwargs):
+                raise AssertionError("纯叙事情景不应重新运行蒙特卡洛模拟")
+
+        from app.routers import bracket as bracket_router
+
+        monkeypatch.setattr(bracket_router, "get_engine", lambda: FailingEngine())
+        scenario = await client.get(
+            f"/api/v1/bracket/simulation?iterations=100&event_ids={event_id}"
+            f"&baseline_simulation_id={baseline_body['simulation_id']}"
+        )
+        assert scenario.status_code == 200
+        body = scenario.json()
+        assert body["summary"] == baseline_body["summary"]
+        assert body["representative_path"] == baseline_body["representative_path"]
+        assert body["model"] == baseline_body["model"]
+        assert body["scenario"]["math_events"] == []
+        assert [item["event_id"] for item in body["scenario"]["narrative_events"]] == [event_id]
+        assert body["scenario"]["ignored_events"] == []
+        assert "数学基线不变" in body["scenario"]["label"]
+
+        analysis = await client.post("/api/v1/predictions/match", json={
+            "simulation_id": body["simulation_id"],
+            "match_key": match["match_key"],
+        })
+        assert analysis.status_code == 200
+        math_context = analysis.json()["math"]
+        assert math_context["math_events"] == []
+        assert [
+            item["title"] for item in math_context["narrative_events"]
+        ] == ["仅供 AI 解读的背景"]
 
     async def test_simulation_seed_is_reproducible(self, client):
         first = await client.get(

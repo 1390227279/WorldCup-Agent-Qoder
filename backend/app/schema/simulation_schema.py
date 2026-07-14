@@ -83,6 +83,19 @@ class AppliedScenarioEvent(BaseModel):
     impact: dict[str, float]
 
 
+class NarrativeScenarioEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: int
+    team_id: int
+    team_code: str
+    type: str
+    severity: str
+    title: str
+    description: str | None = None
+    impact: dict[str, Any]
+
+
 class IgnoredScenarioEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -96,10 +109,12 @@ class ScenarioInfo(BaseModel):
     type: Literal["BASELINE", "EVENT"]
     label: str
     requested_event_ids: list[int]
-    applied_events: list[AppliedScenarioEvent]
+    math_events: list[AppliedScenarioEvent]
+    narrative_events: list[NarrativeScenarioEvent]
     ignored_events: list[IgnoredScenarioEvent]
     team_impacts: dict[str, dict[str, float]]
-    team_event_ids: dict[str, list[int]]
+    team_math_event_ids: dict[str, list[int]]
+    team_narrative_event_ids: dict[str, list[int]]
     event_content_fingerprint: str
 
 

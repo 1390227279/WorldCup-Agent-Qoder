@@ -76,6 +76,35 @@ def test_tournament_migration_backfills_legacy_teams_idempotently(tmp_path):
         assert _applied_versions(connection) == set(MIGRATION_VERSIONS)
 
 
+def test_tournament_migration_supports_orm_tables_without_server_time_defaults(
+    tmp_path,
+):
+    engine = create_engine(f"sqlite:///{tmp_path / 'orm-created.db'}")
+    Base.metadata.create_all(engine)
+
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO teams "
+            "(id, name, name_cn, fifa_code, confederation, elo_rating) "
+            "VALUES (1, 'Argentina', '阿根廷', 'ARG', 'CONMEBOL', 2100)"
+        ))
+
+        run_migrations(connection)
+
+        tournament = connection.execute(text(
+            "SELECT created_at, updated_at FROM tournaments "
+            "WHERE code = 'world-cup-2026'"
+        )).one()
+        participant = connection.execute(text(
+            "SELECT created_at, updated_at FROM tournament_teams "
+            "WHERE team_id = 1"
+        )).one()
+
+        assert all(value is not None for value in tournament)
+        assert all(value is not None for value in participant)
+        assert _applied_versions(connection) == set(MIGRATION_VERSIONS)
+
+
 def test_new_database_does_not_create_legacy_team_tournament_columns():
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)

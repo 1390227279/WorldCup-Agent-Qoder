@@ -10,6 +10,15 @@ import { usePredictions } from "../hooks/usePredictions";
 import { api, simulationQueryKeys } from "../services/api";
 import type { Match, SimulationResult } from "../types";
 
+const IGNORED_REASON_LABELS: Record<string, string> = {
+  not_found: "事件不存在",
+  inactive: "事件已停用",
+  not_effective: "尚未到生效时间",
+  expired: "事件已过期",
+  team_not_in_tournament: "球队不在当前赛事",
+  invalid_impact: "影响参数格式无效",
+};
+
 export default function BracketSandboxPage() {
   const [selectedEventIds, setSelectedEventIds] = useState<number[]>([]);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
@@ -135,10 +144,11 @@ export default function BracketSandboxPage() {
       return null;
     }
     const affectedTeamIds = [...new Set(
-      scenarioSimulation.scenario.applied_events.map((event) => event.team_id),
+      scenarioSimulation.scenario.math_events.map((event) => event.team_id),
     )];
     return {
-      events: scenarioSimulation.scenario.applied_events,
+      mathEvents: scenarioSimulation.scenario.math_events,
+      narrativeEvents: scenarioSimulation.scenario.narrative_events,
       ignoredCount: scenarioSimulation.scenario.ignored_events.length,
       teams: affectedTeamIds.map((teamId) => {
         const scenarioAdvancement = scenarioSimulation.summary.advancement_probs[teamId];
@@ -186,7 +196,7 @@ export default function BracketSandboxPage() {
           </button>
         </div>
         <p className="text-[var(--color-text-muted)]">
-          {simulation?.scenario.type === "EVENT" ? "当前事件情景路径" : "基线代表路径"}
+          {simulation?.scenario.type === "EVENT" ? simulation.scenario.label : "基线代表路径"}
           {simulation?.simulation_id ? ` · 模拟编号 ${simulation.simulation_id.slice(0, 8)}` : ""}
         </p>
         <p className="mt-1 text-xs text-[var(--color-text-muted)]">
@@ -203,9 +213,11 @@ export default function BracketSandboxPage() {
       {scenarioComparison && (
         <section className="mb-4 rounded-xl border border-[var(--color-gold)]/30 bg-[var(--color-gold)]/5 p-3">
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="font-semibold text-[var(--color-gold)]">当前事件情景</span>
+            <span className="font-semibold text-[var(--color-gold)]">
+              {simulation?.scenario.label ?? "当前事件情景"}
+            </span>
             <span className="text-[var(--color-text-muted)]">
-              已应用 {scenarioComparison.events.length} 个事件，影响 {scenarioComparison.teams.length} 支球队
+              {scenarioComparison.mathEvents.length} 项影响数学模型 · {scenarioComparison.narrativeEvents.length} 项用于 AI 解读
             </span>
             {scenarioComparison.ignoredCount > 0 && (
               <span className="text-[var(--color-accent)]">
@@ -226,14 +238,27 @@ export default function BracketSandboxPage() {
               </span>
             ))}
           </div>
-          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--color-text-muted)]">
-            {scenarioComparison.events.slice(0, 4).map((event) => (
-              <span key={event.event_id}>· {event.title}</span>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs">
+            {scenarioComparison.mathEvents.map((event) => (
+              <span key={event.event_id} className="rounded-full border border-[var(--color-gold)] bg-[var(--color-gold)]/15 px-2.5 py-1 text-[var(--color-gold)] shadow-[0_0_10px_rgba(245,158,11,0.18)]">
+                ∑ {event.title}
+              </span>
             ))}
-            {scenarioComparison.events.length > 4 && (
-              <span>另有 {scenarioComparison.events.length - 4} 个事件</span>
-            )}
+            {scenarioComparison.narrativeEvents.map((event) => (
+              <span key={event.event_id} title="仅作为 AI 解读背景，不影响数学胜率模型" className="rounded-full border border-dashed border-white/30 bg-transparent px-2.5 py-1 text-[var(--color-text-muted)]">
+                ✦ {event.title}
+              </span>
+            ))}
           </div>
+          {scenarioSimulation && scenarioSimulation.scenario.ignored_events.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2 text-xs text-[var(--color-accent)]">
+              {scenarioSimulation.scenario.ignored_events.map((event) => (
+                <span key={event.event_id} className="rounded-full border border-[var(--color-accent)]/30 px-2.5 py-1">
+                  事件 #{event.event_id}：{IGNORED_REASON_LABELS[event.reason] ?? event.reason}
+                </span>
+              ))}
+            </div>
+          )}
         </section>
       )}
 

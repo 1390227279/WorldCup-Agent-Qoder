@@ -6,7 +6,11 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from app.schema.simulation_schema import AppliedScenarioEvent, SimulationTeam
+from app.schema.simulation_schema import (
+    AppliedScenarioEvent,
+    NarrativeScenarioEvent,
+    SimulationTeam,
+)
 
 
 class ToolCallRecord(BaseModel):
@@ -68,7 +72,8 @@ class MatchMathContext(BaseModel):
     home_lambda: float = Field(gt=0.0)
     away_lambda: float = Field(gt=0.0)
     probabilities: MatchOutcomeProbabilities
-    applied_events: list[AppliedScenarioEvent]
+    math_events: list[AppliedScenarioEvent]
+    narrative_events: list[NarrativeScenarioEvent]
 
 
 class MatchAgentAnalysis(BaseModel):

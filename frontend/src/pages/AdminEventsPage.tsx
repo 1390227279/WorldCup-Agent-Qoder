@@ -31,6 +31,7 @@ interface EventFormState {
   title: string;
   description: string;
   severity: string;
+  impact_mode: "MATH" | "NARRATIVE";
   attack_percent: string;
   concede_percent: string;
   other_impact: Record<string, number>;
@@ -49,6 +50,7 @@ function emptyForm(): EventFormState {
     title: "",
     description: "",
     severity: "MINOR",
+    impact_mode: "MATH",
     attack_percent: "0",
     concede_percent: "0",
     other_impact: {},
@@ -164,6 +166,7 @@ export default function AdminEventsPage() {
       title: event.title,
       description: event.description ?? "",
       severity: event.severity,
+      impact_mode: event.impact_mode === "MATH" ? "MATH" : "NARRATIVE",
       attack_percent: percentFromImpact(event, "attack_lambda_delta", "attack"),
       concede_percent: percentFromImpact(event, "concede_lambda_delta", "defense"),
       other_impact: otherImpactFields(event),
@@ -189,12 +192,18 @@ export default function AdminEventsPage() {
       return;
     }
     if (
+      form.impact_mode === "MATH" && (
       !Number.isFinite(attackPercent) ||
       !Number.isFinite(concedePercent) ||
       attackPercent < minPercent || attackPercent > maxPercent ||
       concedePercent < minPercent || concedePercent > maxPercent
+      )
     ) {
       setFormError(`两项修正必须在 ${minPercent}% 到 +${maxPercent}% 之间`);
+      return;
+    }
+    if (form.impact_mode === "MATH" && attackPercent === 0 && concedePercent === 0) {
+      setFormError("数学影响事件必须至少填写一项非零进球期望修正");
       return;
     }
     if (
@@ -206,11 +215,13 @@ export default function AdminEventsPage() {
       return;
     }
 
-    const impact = {
-      ...form.other_impact,
-      attack_lambda_delta: attackPercent / 100,
-      concede_lambda_delta: concedePercent / 100,
-    };
+    const impact = form.impact_mode === "MATH"
+      ? {
+          ...form.other_impact,
+          attack_lambda_delta: attackPercent / 100,
+          concede_lambda_delta: concedePercent / 100,
+        }
+      : form.other_impact;
     const createPayload: EventCreate = {
       team_id: form.team_id,
       type: form.type,
@@ -218,6 +229,7 @@ export default function AdminEventsPage() {
       description: form.description.trim() || undefined,
       severity: form.severity,
       impact,
+      impact_mode: form.impact_mode,
       source: form.source.trim() || undefined,
       source_type: form.source_type,
       source_url: form.source_url.trim() || undefined,
@@ -250,7 +262,7 @@ export default function AdminEventsPage() {
       <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="mb-2 text-3xl font-bold">赛事事件管理</h1>
-          <p className="text-sm text-[var(--color-text-muted)]">事件只修正当前情景的进球期望，不会修改球队原始 ELO。</p>
+          <p className="text-sm text-[var(--color-text-muted)]">数学事件修正当前情景的进球期望；叙事事件只进入 AI 解读上下文。两者都不会修改球队原始 ELO。</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <a href={api.eventImportTemplateUrl} className="rounded-lg border border-white/15 px-3 py-2 text-sm">下载导入模板</a>
@@ -315,18 +327,36 @@ export default function AdminEventsPage() {
               <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} rows={2} className="mt-1 w-full resize-none rounded-lg border border-white/10 bg-[var(--color-bg)] px-3 py-2 text-sm" />
             </label>
 
-            <div className="rounded-lg border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5 p-3">
-              <label className="text-xs font-semibold text-[var(--color-primary)]">本队进球期望修正（%）
-                <input type="number" min={minPercent} max={maxPercent} step="1" value={form.attack_percent} onChange={(event) => setForm({ ...form, attack_percent: event.target.value })} className="mt-1 w-full rounded-lg bg-[var(--color-bg)] px-3 py-2 text-sm" />
-              </label>
-              <p className="mt-2 text-[11px] text-[var(--color-text-muted)]">例如 -10% 表示本队进球 λ × 0.90；+10% 表示 λ × 1.10。</p>
+            <div className="md:col-span-2">
+              <p className="mb-2 text-xs text-[var(--color-text-muted)]">事件作用</p>
+              <div className="grid gap-3 md:grid-cols-2">
+                <button type="button" onClick={() => setForm({ ...form, impact_mode: "MATH" })} className={`rounded-xl border p-4 text-left ${form.impact_mode === "MATH" ? "border-[var(--color-gold)] bg-[var(--color-gold)]/15 shadow-[0_0_18px_rgba(245,158,11,0.18)]" : "border-[var(--color-gold)]/20 bg-transparent"}`}>
+                  <p className="font-semibold text-[var(--color-gold)]">∑ 影响数学模型</p>
+                  <p className="mt-1 text-xs text-[var(--color-text-muted)]">修正进球期望，并改变比赛胜率与晋级概率。</p>
+                </button>
+                <button type="button" onClick={() => setForm({ ...form, impact_mode: "NARRATIVE" })} className={`rounded-xl border border-dashed p-4 text-left ${form.impact_mode === "NARRATIVE" ? "border-white/50 bg-white/5" : "border-white/20 bg-transparent"}`}>
+                  <p className="font-semibold">✦ 仅作为 AI 解读背景</p>
+                  <p className="mt-1 text-xs text-[var(--color-text-muted)]">保留士气、经历和战术语境，不影响数学胜率模型。</p>
+                </button>
+              </div>
             </div>
-            <div className="rounded-lg border border-[var(--color-gold)]/30 bg-[var(--color-gold)]/5 p-3">
-              <label className="text-xs font-semibold text-[var(--color-gold)]">本队失球期望修正（%）
-                <input type="number" min={minPercent} max={maxPercent} step="1" value={form.concede_percent} onChange={(event) => setForm({ ...form, concede_percent: event.target.value })} className="mt-1 w-full rounded-lg bg-[var(--color-bg)] px-3 py-2 text-sm" />
-              </label>
-              <p className="mt-2 text-[11px] text-[var(--color-text-muted)]">例如 +10% 表示对手面对本队时进球 λ × 1.10，即本队防守变差。</p>
-            </div>
+
+            {form.impact_mode === "MATH" && (
+              <>
+                <div className="rounded-lg border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5 p-3">
+                  <label className="text-xs font-semibold text-[var(--color-primary)]">本队进球期望修正（%）
+                    <input type="number" min={minPercent} max={maxPercent} step="1" value={form.attack_percent} onChange={(event) => setForm({ ...form, attack_percent: event.target.value })} className="mt-1 w-full rounded-lg bg-[var(--color-bg)] px-3 py-2 text-sm" />
+                  </label>
+                  <p className="mt-2 text-[11px] text-[var(--color-text-muted)]">例如 -10% 表示本队进球 λ × 0.90；+10% 表示 λ × 1.10。</p>
+                </div>
+                <div className="rounded-lg border border-[var(--color-gold)]/30 bg-[var(--color-gold)]/5 p-3">
+                  <label className="text-xs font-semibold text-[var(--color-gold)]">本队失球期望修正（%）
+                    <input type="number" min={minPercent} max={maxPercent} step="1" value={form.concede_percent} onChange={(event) => setForm({ ...form, concede_percent: event.target.value })} className="mt-1 w-full rounded-lg bg-[var(--color-bg)] px-3 py-2 text-sm" />
+                  </label>
+                  <p className="mt-2 text-[11px] text-[var(--color-text-muted)]">例如 +10% 表示对手面对本队时进球 λ × 1.10，即本队防守变差。</p>
+                </div>
+              </>
+            )}
 
             <label className="text-xs text-[var(--color-text-muted)]">生效时间
               <input type="datetime-local" value={form.effective_at} onChange={(event) => setForm({ ...form, effective_at: event.target.value })} className="mt-1 w-full rounded-lg bg-[var(--color-bg)] px-3 py-2 text-sm" />
@@ -366,16 +396,26 @@ export default function AdminEventsPage() {
                       <span className="text-xs text-[var(--color-text-muted)]">[{event.type_label ?? event.type}]</span>
                       <span className="text-xs text-[var(--color-primary)]">{event.team_name}</span>
                       <span className="font-semibold">{event.title}</span>
+                      <span className={event.impact_mode === "MATH"
+                        ? "rounded-full border border-[var(--color-gold)] bg-[var(--color-gold)]/15 px-2 py-0.5 text-xs text-[var(--color-gold)] shadow-[0_0_10px_rgba(245,158,11,0.16)]"
+                        : "rounded-full border border-dashed border-white/30 bg-transparent px-2 py-0.5 text-xs text-[var(--color-text-muted)]"
+                      }>
+                        {event.impact_mode === "MATH" ? "∑ 数学影响" : event.impact_mode === "NARRATIVE" ? "✦ AI 解读" : "数据无效"}
+                      </span>
                       <span className={`rounded-full px-2 py-0.5 text-xs ${statusClass(event.status)}`}>{event.status_label ?? (event.active ? "生效中" : "已停用")}</span>
                     </div>
                     <p className="mt-1 text-xs text-[var(--color-text-muted)]">所属赛事：{event.tournament?.name_cn ?? "未关联赛事"} · 严重程度：{event.severity_label ?? event.severity}</p>
                   </div>
                 </div>
                 {event.description && <p className="mt-2 text-sm text-[var(--color-text-muted)]">{event.description}</p>}
-                <div className="mt-3 grid gap-2 text-xs md:grid-cols-2">
-                  <div className="rounded-lg bg-[var(--color-bg)] p-2">本队进球期望：{attack == null ? "未设置" : `${attack >= 0 ? "+" : ""}${(attack * 100).toFixed(1)}%`}</div>
-                  <div className="rounded-lg bg-[var(--color-bg)] p-2">本队失球期望：{concede == null ? "未设置" : `${concede >= 0 ? "+" : ""}${(concede * 100).toFixed(1)}%`}</div>
-                </div>
+                {event.impact_mode === "MATH" ? (
+                  <div className="mt-3 grid gap-2 text-xs md:grid-cols-2">
+                    <div className="rounded-lg bg-[var(--color-bg)] p-2">本队进球期望：{attack == null ? "未设置" : `${attack >= 0 ? "+" : ""}${(attack * 100).toFixed(1)}%`}</div>
+                    <div className="rounded-lg bg-[var(--color-bg)] p-2">本队失球期望：{concede == null ? "未设置" : `${concede >= 0 ? "+" : ""}${(concede * 100).toFixed(1)}%`}</div>
+                  </div>
+                ) : (
+                  <p className="mt-3 rounded-lg border border-dashed border-white/20 px-3 py-2 text-xs text-[var(--color-text-muted)]">此事件仅作为相关比赛的 AI 解读背景，不修改比分、胜率或晋级概率。</p>
+                )}
                 {event.needs_impact_migration && (
                   <p className="mt-2 rounded-lg bg-orange-500/10 px-3 py-2 text-xs text-orange-300">此事件仍使用旧影响字段（{event.legacy_impact_fields?.join("、")}），点击“修改”并保存即可迁移为标准 λ 字段。</p>
                 )}

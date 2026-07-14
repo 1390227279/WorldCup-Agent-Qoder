@@ -85,6 +85,8 @@ export interface Event {
   status_label?: string;
   legacy_impact_fields?: string[];
   needs_impact_migration?: boolean;
+  impact_mode: "MATH" | "NARRATIVE" | "INVALID";
+  affects_probability: boolean;
   tournament?: {
     id: number;
     code: string;
@@ -101,6 +103,7 @@ export interface EventCreate {
   description?: string;
   severity?: string;
   impact?: Record<string, number>;
+  impact_mode?: "MATH" | "NARRATIVE";
   source?: string;
   source_type?: string;
   source_url?: string;
@@ -116,6 +119,7 @@ export interface EventUpdate {
   description?: string | null;
   severity?: string;
   impact?: Record<string, number> | null;
+  impact_mode?: "MATH" | "NARRATIVE";
   active?: boolean;
   source?: string | null;
   source_type?: string | null;
@@ -140,6 +144,7 @@ export interface EventMetadata {
   severities: Record<string, string>;
   impact_fields: Record<string, string>;
   impact_range: { min: number; max: number };
+  impact_modes: Record<"MATH" | "NARRATIVE", string>;
 }
 
 export interface SimulationProbabilityEntry {
@@ -169,19 +174,30 @@ export interface SimulationScenario {
   type: "BASELINE" | "EVENT";
   label: string;
   requested_event_ids: number[];
-  applied_events: Array<{
+  math_events: Array<{
     event_id: number;
     team_id: number;
     team_code: string;
     title: string;
     impact: Record<string, number>;
   }>;
+  narrative_events: Array<{
+    event_id: number;
+    team_id: number;
+    team_code: string;
+    type: string;
+    severity: string;
+    title: string;
+    description: string | null;
+    impact: Record<string, unknown>;
+  }>;
   ignored_events: Array<{
     event_id: number;
     reason: string;
   }>;
   team_impacts: Record<string, Record<string, number>>;
-  team_event_ids: Record<string, number[]>;
+  team_math_event_ids: Record<string, number[]>;
+  team_narrative_event_ids: Record<string, number[]>;
   event_content_fingerprint: string;
 }
 
@@ -257,12 +273,22 @@ export interface MatchMathContext {
   home_lambda: number;
   away_lambda: number;
   probabilities: MatchOutcomeProbabilities;
-  applied_events: Array<{
+  math_events: Array<{
     event_id: number;
     team_id: number;
     team_code: string;
     title: string;
     impact: Record<string, number>;
+  }>;
+  narrative_events: Array<{
+    event_id: number;
+    team_id: number;
+    team_code: string;
+    type: string;
+    severity: string;
+    title: string;
+    description: string | null;
+    impact: Record<string, unknown>;
   }>;
 }
 

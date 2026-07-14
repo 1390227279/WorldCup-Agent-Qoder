@@ -58,9 +58,14 @@ class PredictionService:
             response["scenario"]["team_impacts"],
         )
         team_ids = {home["id"], away["id"]}
-        relevant_events = [
+        relevant_math_events = [
             event
-            for event in response["scenario"]["applied_events"]
+            for event in response["scenario"]["math_events"]
+            if event["team_id"] in team_ids
+        ]
+        relevant_narrative_events = [
+            event
+            for event in response["scenario"]["narrative_events"]
             if event["team_id"] in team_ids
         ]
         return MatchMathContext(
@@ -83,7 +88,8 @@ class PredictionService:
                 home["elo_rating"],
                 away["elo_rating"],
             ),
-            applied_events=relevant_events,
+            math_events=relevant_math_events,
+            narrative_events=relevant_narrative_events,
         )
 
     async def analyze_simulated_match(

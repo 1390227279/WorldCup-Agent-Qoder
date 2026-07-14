@@ -22,6 +22,9 @@ LEGACY_ATTACK_KEY = "attack"
 LEGACY_DEFENSE_KEY = "defense"
 MIN_EVENT_DELTA = -0.5
 MAX_EVENT_DELTA = 0.5
+IMPACT_MODE_MATH = "MATH"
+IMPACT_MODE_NARRATIVE = "NARRATIVE"
+IMPACT_MODE_INVALID = "INVALID"
 
 
 class EventImpactError(ValueError):
@@ -63,6 +66,30 @@ class AppliedScenarioEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class NarrativeScenarioEvent:
+    event_id: int
+    team_id: int
+    team_code: str
+    type: str
+    severity: str
+    title: str
+    description: str | None
+    impact: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "event_id": self.event_id,
+            "team_id": self.team_id,
+            "team_code": self.team_code,
+            "type": self.type,
+            "severity": self.severity,
+            "title": self.title,
+            "description": self.description,
+            "impact": self.impact,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class IgnoredScenarioEvent:
     event_id: int
     reason: str
@@ -75,24 +102,30 @@ class IgnoredScenarioEvent:
 class ScenarioResolution:
     requested_event_ids: list[int]
     team_impacts: dict[str, dict[str, float]] = field(default_factory=dict)
-    applied_events: list[AppliedScenarioEvent] = field(default_factory=list)
+    math_events: list[AppliedScenarioEvent] = field(default_factory=list)
+    narrative_events: list[NarrativeScenarioEvent] = field(default_factory=list)
     ignored_events: list[IgnoredScenarioEvent] = field(default_factory=list)
-    team_event_ids: dict[str, list[int]] = field(default_factory=dict)
+    team_math_event_ids: dict[str, list[int]] = field(default_factory=dict)
+    team_narrative_event_ids: dict[str, list[int]] = field(default_factory=dict)
     event_content_fingerprint: str = field(
         default_factory=lambda: hashlib.sha256(b"[]").hexdigest()
     )
 
     @property
-    def applied_event_ids(self) -> list[int]:
-        return [event.event_id for event in self.applied_events]
+    def math_event_ids(self) -> list[int]:
+        return [event.event_id for event in self.math_events]
 
     def audit_dict(self) -> dict[str, Any]:
         return {
             "requested_event_ids": self.requested_event_ids,
-            "applied_events": [event.to_dict() for event in self.applied_events],
+            "math_events": [event.to_dict() for event in self.math_events],
+            "narrative_events": [
+                event.to_dict() for event in self.narrative_events
+            ],
             "ignored_events": [event.to_dict() for event in self.ignored_events],
             "team_impacts": self.team_impacts,
-            "team_event_ids": self.team_event_ids,
+            "team_math_event_ids": self.team_math_event_ids,
+            "team_narrative_event_ids": self.team_narrative_event_ids,
             "event_content_fingerprint": self.event_content_fingerprint,
         }
 
@@ -152,6 +185,15 @@ def extract_lambda_impact(impact: dict[str, Any] | None) -> LambdaImpact:
             impact, CONCEDE_LAMBDA_DELTA, LEGACY_DEFENSE_KEY
         ),
     )
+
+
+def classify_event_impact(impact: dict[str, Any] | None) -> str:
+    """Classify whether an event changes mathematics or only enriches AI context."""
+    try:
+        lambda_impact = extract_lambda_impact(impact)
+    except EventImpactError:
+        return IMPACT_MODE_INVALID
+    return IMPACT_MODE_MATH if lambda_impact.has_effect else IMPACT_MODE_NARRATIVE
 
 
 def normalize_impact_for_storage(
@@ -301,8 +343,20 @@ async def resolve_scenario_events(
             )
             continue
         if not lambda_impact.has_effect:
-            resolution.ignored_events.append(
-                IgnoredScenarioEvent(event_id, "no_lambda_impact")
+            resolution.narrative_events.append(
+                NarrativeScenarioEvent(
+                    event_id=event.id,
+                    team_id=event.team_id,
+                    team_code=team_code,
+                    type=event.type,
+                    severity=event.severity,
+                    title=event.title,
+                    description=event.description,
+                    impact=dict(event.impact or {}),
+                )
+            )
+            resolution.team_narrative_event_ids.setdefault(team_code, []).append(
+                event.id
             )
             continue
 
@@ -315,7 +369,7 @@ async def resolve_scenario_events(
                 previous.concede_lambda_delta + lambda_impact.concede_lambda_delta
             ),
         )
-        resolution.applied_events.append(
+        resolution.math_events.append(
             AppliedScenarioEvent(
                 event_id=event.id,
                 team_id=event.team_id,
@@ -324,7 +378,7 @@ async def resolve_scenario_events(
                 impact=lambda_impact,
             )
         )
-        resolution.team_event_ids.setdefault(team_code, []).append(event.id)
+        resolution.team_math_event_ids.setdefault(team_code, []).append(event.id)
 
     resolution.team_impacts = {
         team_code: LambdaImpact(

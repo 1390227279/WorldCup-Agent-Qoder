@@ -15,6 +15,26 @@ const SEVERITY_LABELS: Record<string, string> = {
   MINOR: "一般",
 };
 
+function ImpactModeBadge({ event }: { event: Event }) {
+  const isMath = event.impact_mode === "MATH";
+  const tooltip = isMath
+    ? "此事件会修正进球期望，并改变比赛胜率与晋级概率"
+    : "此事件仅作为 AI 解读背景，不影响数学胜率模型";
+  return (
+    <span className="group relative inline-flex shrink-0" tabIndex={0} aria-label={tooltip}>
+      <span className={isMath
+        ? "rounded-full border border-[var(--color-gold)] bg-[var(--color-gold)]/20 px-2 py-0.5 text-[10px] font-semibold text-[var(--color-gold)] shadow-[0_0_12px_rgba(245,158,11,0.25)]"
+        : "rounded-full border border-dashed border-white/30 bg-transparent px-2 py-0.5 text-[10px] text-[var(--color-text-muted)]"
+      }>
+        {isMath ? "∑ 数学影响" : "✦ AI 解读"}
+      </span>
+      <span className="pointer-events-none absolute right-0 top-full z-20 mt-2 w-56 rounded-lg bg-black/90 px-3 py-2 text-left text-[11px] leading-relaxed text-white opacity-0 shadow-xl transition-opacity group-hover:opacity-100 group-focus:opacity-100">
+        {tooltip}
+      </span>
+    </span>
+  );
+}
+
 export default function ScenarioSlider({ selectedEventIds, onChange, disabled = false }: ScenarioSliderProps) {
   const [events, setEvents] = useState<Event[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -25,6 +45,7 @@ export default function ScenarioSlider({ selectedEventIds, onChange, disabled = 
   const [teamFilter, setTeamFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [severityFilter, setSeverityFilter] = useState("");
+  const [impactModeFilter, setImpactModeFilter] = useState("");
   const [page, setPage] = useState(1);
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
@@ -46,7 +67,10 @@ export default function ScenarioSlider({ selectedEventIds, onChange, disabled = 
     () => new Map(events.map((event) => [event.id, event])),
     [events],
   );
-  const activeEvents = useMemo(() => events.filter((event) => event.active), [events]);
+  const activeEvents = useMemo(
+    () => events.filter((event) => event.active && event.impact_mode !== "INVALID"),
+    [events],
+  );
   const draftSet = useMemo(() => new Set(draftIds), [draftIds]);
 
   const filteredEvents = useMemo(() => {
@@ -59,18 +83,21 @@ export default function ScenarioSlider({ selectedEventIds, onChange, disabled = 
         return matchesSearch
           && (!teamFilter || event.team_id === Number(teamFilter))
           && (!typeFilter || event.type === typeFilter)
-          && (!severityFilter || event.severity === severityFilter);
+          && (!severityFilter || event.severity === severityFilter)
+          && (!impactModeFilter || event.impact_mode === impactModeFilter);
       })
       .sort((a, b) => Number(draftSet.has(b.id)) - Number(draftSet.has(a.id)));
-  }, [activeEvents, draftSet, search, severityFilter, teamById, teamFilter, typeFilter]);
+  }, [activeEvents, draftSet, impactModeFilter, search, severityFilter, teamById, teamFilter, typeFilter]);
 
-  useEffect(() => setPage(1), [search, teamFilter, typeFilter, severityFilter]);
+  useEffect(() => setPage(1), [search, teamFilter, typeFilter, severityFilter, impactModeFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredEvents.length / PAGE_SIZE));
   const visibleEvents = filteredEvents.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const selectedEvents = selectedEventIds
     .map((id) => eventById.get(id))
     .filter((event): event is Event => Boolean(event));
+  const selectedMathCount = selectedEvents.filter((event) => event.impact_mode === "MATH").length;
+  const selectedNarrativeCount = selectedEvents.filter((event) => event.impact_mode === "NARRATIVE").length;
 
   const showDrawer = () => {
     setDraftIds(selectedEventIds);
@@ -101,10 +128,19 @@ export default function ScenarioSlider({ selectedEventIds, onChange, disabled = 
     <div className="mb-4">
       <div className="flex flex-wrap items-center gap-2 rounded-xl bg-[var(--color-surface)] px-3 py-2">
         <span className="text-sm font-semibold">事件影响</span>
-        <span className="text-xs text-[var(--color-text-muted)]">已选择 {selectedEventIds.length} 项</span>
+        <span className="text-xs text-[var(--color-text-muted)]">
+          已选择 {selectedEventIds.length} 项 · {selectedMathCount} 项影响数学模型 · {selectedNarrativeCount} 项用于 AI 解读
+        </span>
         <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
           {selectedEvents.slice(0, 3).map((event) => (
-            <span key={event.id} className="max-w-48 truncate rounded-full bg-[var(--color-primary)]/15 px-2.5 py-1 text-xs text-[var(--color-primary)]">
+            <span
+              key={event.id}
+              title={event.impact_mode === "MATH" ? "影响数学胜率模型" : "仅作为 AI 解读背景，不影响数学胜率"}
+              className={`max-w-48 truncate rounded-full border px-2.5 py-1 text-xs ${event.impact_mode === "MATH"
+                ? "border-[var(--color-gold)] bg-[var(--color-gold)]/20 text-[var(--color-gold)] shadow-[0_0_10px_rgba(245,158,11,0.2)]"
+                : "border-dashed border-white/30 bg-transparent text-[var(--color-text-muted)]"
+              }`}
+            >
               {event.team_name ?? teamById.get(event.team_id)?.name_cn}：{event.title}
             </span>
           ))}
@@ -158,11 +194,16 @@ export default function ScenarioSlider({ selectedEventIds, onChange, disabled = 
                 <option value="MORALE">士气</option>
                 <option value="OTHER">其他</option>
               </select>
-              <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)} className="col-span-2 rounded-lg bg-[var(--color-bg)] px-3 py-2 text-sm">
+              <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)} className="rounded-lg bg-[var(--color-bg)] px-3 py-2 text-sm">
                 <option value="">全部严重程度</option>
                 <option value="CRITICAL">严重</option>
                 <option value="MAJOR">重要</option>
                 <option value="MINOR">一般</option>
+              </select>
+              <select value={impactModeFilter} onChange={(event) => setImpactModeFilter(event.target.value)} className="rounded-lg bg-[var(--color-bg)] px-3 py-2 text-sm">
+                <option value="">全部影响类型</option>
+                <option value="MATH">影响数学模型</option>
+                <option value="NARRATIVE">仅用于 AI 解读</option>
               </select>
             </div>
 
@@ -173,13 +214,23 @@ export default function ScenarioSlider({ selectedEventIds, onChange, disabled = 
                 const selected = draftSet.has(event.id);
                 const team = teamById.get(event.team_id);
                 return (
-                  <button key={event.id} onClick={() => toggleDraft(event.id)} className={`mb-2 w-full rounded-lg border p-3 text-left ${selected ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10" : "border-white/10 bg-[var(--color-bg)]"}`}>
+                  <button key={event.id} onClick={() => toggleDraft(event.id)} className={`mb-2 w-full rounded-lg border p-3 text-left ${selected
+                    ? event.impact_mode === "MATH"
+                      ? "border-[var(--color-gold)] bg-[var(--color-gold)]/10 shadow-[0_0_16px_rgba(245,158,11,0.12)]"
+                      : "border-dashed border-white/40 bg-white/5"
+                    : event.impact_mode === "MATH"
+                      ? "border-[var(--color-gold)]/25 bg-[var(--color-bg)]"
+                      : "border-dashed border-white/15 bg-[var(--color-bg)]"
+                  }`}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold">{team?.name_cn ?? event.team_name} · {event.title}</p>
                         <p className="mt-1 line-clamp-2 text-xs text-[var(--color-text-muted)]">{event.description || "暂无详细描述"}</p>
                       </div>
-                      <span className="shrink-0 rounded-full px-2 py-0.5 text-xs text-[var(--color-text-muted)]">{SEVERITY_LABELS[event.severity] ?? event.severity}</span>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <ImpactModeBadge event={event} />
+                        <span className="rounded-full px-2 py-0.5 text-xs text-[var(--color-text-muted)]">{SEVERITY_LABELS[event.severity] ?? event.severity}</span>
+                      </div>
                     </div>
                   </button>
                 );

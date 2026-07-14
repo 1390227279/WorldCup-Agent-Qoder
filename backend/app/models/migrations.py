@@ -89,8 +89,10 @@ def _migrate_tournament_domain(connection) -> None:
     connection.execute(
         text(
             "INSERT INTO tournaments "
-            "(code, name, name_cn, year, status, data_version, rules_version) "
-            "SELECT :code, :name, :name_cn, :year, :status, :data_version, :rules_version "
+            "(code, name, name_cn, year, status, data_version, rules_version, "
+            "created_at, updated_at) "
+            "SELECT :code, :name, :name_cn, :year, :status, :data_version, "
+            ":rules_version, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP "
             "WHERE NOT EXISTS (SELECT 1 FROM tournaments WHERE code = :code)"
         ),
         {
@@ -115,9 +117,10 @@ def _migrate_tournament_domain(connection) -> None:
     pot_expression = "team.pot" if "pot" in team_columns else "NULL"
     connection.execute(text(
         "INSERT INTO tournament_teams "
-        "(tournament_id, team_id, group_name, pot, qualification_status, active) "
+        "(tournament_id, team_id, group_name, pot, qualification_status, active, "
+        "created_at, updated_at) "
         f"SELECT tournament.id, team.id, {group_expression}, {pot_expression}, "
-        "'LEGACY', 1 "
+        "'LEGACY', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP "
         "FROM tournaments AS tournament CROSS JOIN teams AS team "
         "WHERE tournament.code = :code "
         "AND NOT EXISTS ("

@@ -3,7 +3,7 @@
 import logging
 import json
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
@@ -26,6 +26,7 @@ from app.services.scenario_resolver import (
     MAX_EVENT_DELTA,
     MIN_EVENT_DELTA,
     EventImpactError,
+    classify_event_impact,
     normalize_impact_for_storage,
 )
 from app.services.simulation_cache import get_simulation_cache
@@ -41,6 +42,7 @@ class EventCreate(BaseModel):
     description: Optional[str] = None
     severity: str = "MINOR"
     impact: Optional[dict] = None
+    impact_mode: Optional[Literal["MATH", "NARRATIVE"]] = None
     source: Optional[str] = None
     source_type: str = "MANUAL"
     source_url: Optional[str] = None
@@ -55,6 +57,7 @@ class EventUpdate(BaseModel):
     description: Optional[str] = None
     severity: Optional[str] = None
     impact: Optional[dict] = None
+    impact_mode: Optional[Literal["MATH", "NARRATIVE"]] = None
     active: Optional[bool] = None
     source: Optional[str] = None
     source_type: Optional[str] = None
@@ -97,6 +100,19 @@ def _validate_event_window(
     if effective_at and expires_at and expires_at <= effective_at:
         raise ValueError("失效时间必须晚于生效时间")
 
+
+def _validate_impact_mode(
+    requested_mode: str | None,
+    impact: dict | None,
+) -> None:
+    if requested_mode is None:
+        return
+    actual_mode = classify_event_impact(impact)
+    if requested_mode == "MATH" and actual_mode != "MATH":
+        raise ValueError("数学影响事件必须至少包含一项非零进球期望修正")
+    if requested_mode == "NARRATIVE" and actual_mode != "NARRATIVE":
+        raise ValueError("叙事背景事件不能包含非零进球期望修正")
+
 def _event_to_dict(event: Event) -> dict:
     d = event.to_dict()
     if event.team:
@@ -113,6 +129,9 @@ def _event_to_dict(event: Event) -> dict:
     ]
     d["legacy_impact_fields"] = legacy_fields
     d["needs_impact_migration"] = bool(legacy_fields)
+    impact_mode = classify_event_impact(event.impact)
+    d["impact_mode"] = impact_mode
+    d["affects_probability"] = impact_mode == "MATH"
     if event.team:
         entries = [entry for entry in event.team.tournament_entries if entry.active]
         entry = next(
@@ -144,6 +163,10 @@ async def get_event_types():
             CONCEDE_LAMBDA_DELTA: "对手面对本队时的进球期望修正",
         },
         "impact_range": {"min": MIN_EVENT_DELTA, "max": MAX_EVENT_DELTA},
+        "impact_modes": {
+            "MATH": "影响数学模型",
+            "NARRATIVE": "仅用于 AI 解读",
+        },
     }
 
 @router.get("")
@@ -180,7 +203,8 @@ async def create_event(req: EventCreate, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
         normalized_impact = normalize_impact_for_storage(req.impact)
-    except EventImpactError as exc:
+        _validate_impact_mode(req.impact_mode, normalized_impact)
+    except (EventImpactError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     event = Event(
         team_id=req.team_id, type=req.type, title=req.title,
@@ -229,6 +253,11 @@ async def update_event(event_id: int, req: EventUpdate, db: AsyncSession = Depen
         try:
             event.impact = normalize_impact_for_storage(req.impact)
         except EventImpactError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if "impact_mode" in fields_set:
+        try:
+            _validate_impact_mode(req.impact_mode, event.impact)
+        except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
     if req.active is not None:
         event.active = req.active

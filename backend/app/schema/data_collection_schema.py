@@ -38,6 +38,8 @@ class DataCollectionProcessResponse(BaseModel):
     run_id: int
     status: CollectionRunStatus
     raw_record_count: int = Field(ge=0)
+    inserted_record_count: int = Field(default=0, ge=0)
+    duplicate_record_count: int = Field(default=0, ge=0)
     updated_team_count: int = Field(ge=0)
     skipped_team_count: int = Field(ge=0)
     errors: list[str] = Field(default_factory=list)

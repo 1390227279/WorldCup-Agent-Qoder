@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../services/api";
+import EventImpactBadge from "../components/EventImpactBadge";
 import type { Event, EventCreate, EventImportResult, EventUpdate, Team } from "../types";
 
 const TYPE_OPTIONS = [
@@ -93,10 +94,10 @@ function sourceTypeLabel(value?: string): string {
 }
 
 function statusClass(status?: Event["status"]): string {
-  if (status === "ACTIVE") return "bg-green-500/15 text-green-400";
-  if (status === "SCHEDULED") return "bg-blue-500/15 text-blue-300";
-  if (status === "EXPIRED") return "bg-orange-500/15 text-orange-300";
-  return "bg-gray-500/15 text-[var(--color-text-muted)]";
+  if (status === "ACTIVE") return "border-[var(--color-secondary)]/30 bg-[var(--color-secondary)]/10 text-[var(--color-secondary)]";
+  if (status === "SCHEDULED") return "border-[var(--color-accent)]/30 bg-[var(--color-accent)]/10 text-[var(--color-accent)]";
+  if (status === "EXPIRED") return "border-[var(--color-primary)]/30 bg-[var(--color-primary)]/10 text-[var(--color-primary)]";
+  return "border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-muted)]";
 }
 
 export default function AdminEventsPage() {
@@ -256,17 +257,16 @@ export default function AdminEventsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
-      <Link to="/" className="mb-6 inline-block text-[var(--color-text-muted)] hover:text-[var(--color-text)]">← 返回首页</Link>
-
-      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+    <div className="mx-auto max-w-[1500px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-[var(--color-border)] pb-5">
         <div>
-          <h1 className="mb-2 text-3xl font-bold">赛事事件管理</h1>
-          <p className="text-sm text-[var(--color-text-muted)]">数学事件修正当前情景的进球期望；叙事事件只进入 AI 解读上下文。两者都不会修改球队原始 ELO。</p>
+          <Link to="/" className="dashboard-label transition-colors hover:text-white">预测总览 / 变量管理</Link>
+          <h1 className="dashboard-title mt-3">赛事事件管理</h1>
+          <p className="mt-2 text-sm text-[var(--color-text-muted)]">区分数学概率变量与 AI 叙事背景，所有修改只作用于指定情景。</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <a href={api.eventImportTemplateUrl} className="rounded-lg border border-white/15 px-3 py-2 text-sm">下载导入模板</a>
-          <label className="cursor-pointer rounded-lg border border-white/15 px-3 py-2 text-sm">
+          <a href={api.eventImportTemplateUrl} className="rounded-md border border-[var(--color-border)] px-3 py-2 text-sm transition-colors hover:border-[var(--color-primary)]">下载导入模板</a>
+          <label className="cursor-pointer rounded-md border border-[var(--color-border)] px-3 py-2 text-sm transition-colors hover:border-[var(--color-primary)]">
             {importMutation.isPending ? "导入中…" : "导入 CSV/JSON"}
             <input
               type="file"
@@ -280,12 +280,12 @@ export default function AdminEventsPage() {
               }}
             />
           </label>
-          <button onClick={startCreate} className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm text-white">+ 新建事件</button>
+          <button onClick={startCreate} className="rounded-md bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-[#1c1d21] hover:bg-[var(--color-primary-hover)]">新建事件</button>
         </div>
       </div>
 
       {importResult && (
-        <div className="mb-6 rounded-xl bg-[var(--color-surface)] p-4 text-sm">
+        <div className="dashboard-card mb-6 border-l-2 border-l-[var(--color-secondary)] p-4 text-sm">
           <p className="font-semibold">导入完成：共 {importResult.total} 条</p>
           <p className="text-[var(--color-text-muted)]">新增 {importResult.created} · 更新 {importResult.updated} · 跳过 {importResult.skipped} · 失败 {importResult.failed}</p>
           {importResult.errors.map((error) => <p key={`${error.row}-${error.error}`} className="mt-1 text-xs text-[var(--color-accent)]">第 {error.row} 行：{error.error}</p>)}
@@ -293,10 +293,10 @@ export default function AdminEventsPage() {
       )}
 
       {showForm && (
-        <div className="mb-8 space-y-4 rounded-xl bg-[var(--color-surface)] p-6">
+        <div className="dashboard-card mb-8 space-y-5 border-[var(--color-primary)]/20 p-5 sm:p-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">{editingId == null ? "新建事件" : "修改事件"}</h2>
-            <button onClick={() => setShowForm(false)} className="text-sm text-[var(--color-text-muted)]">取消</button>
+            <div><p className="dashboard-label uppercase">事件编辑器</p><h2 className="mt-1 text-lg font-semibold">{editingId == null ? "新建事件" : "修改事件"}</h2></div>
+            <button onClick={() => setShowForm(false)} className="rounded-md border border-[var(--color-border)] px-3 py-1.5 text-sm text-[var(--color-text-muted)] hover:text-white">取消</button>
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <label className="text-xs text-[var(--color-text-muted)]">球队
@@ -374,8 +374,10 @@ export default function AdminEventsPage() {
               <input value={form.external_id} onChange={(event) => setForm({ ...form, external_id: event.target.value })} className="mt-1 w-full rounded-lg bg-[var(--color-bg)] px-3 py-2 text-sm" placeholder="用于导入去重（可选）" />
             </label>
           </div>
-          {(formError || mutationError) && <p className="text-sm text-[var(--color-accent)]">{formError || (mutationError instanceof Error ? mutationError.message : "保存失败")}</p>}
-          <button onClick={handleSave} disabled={saving} className="w-full rounded-lg bg-[var(--color-primary)] py-2 text-sm text-white disabled:opacity-50">{saving ? "保存中…" : "保存事件"}</button>
+          {(formError || mutationError) && <p className="text-sm text-[var(--color-error)]">{formError || (mutationError instanceof Error ? mutationError.message : "保存失败")}</p>}
+          <div className="flex justify-end border-t border-[var(--color-border)] pt-4">
+            <button onClick={handleSave} disabled={saving} className="min-w-40 rounded-md bg-[var(--color-primary)] px-5 py-2 text-sm font-semibold text-[#1c1d21] hover:bg-[var(--color-primary-hover)] disabled:opacity-50">{saving ? "保存中…" : "保存事件"}</button>
+          </div>
         </div>
       )}
 
@@ -389,20 +391,15 @@ export default function AdminEventsPage() {
             const attack = event.impact?.attack_lambda_delta ?? event.impact?.attack;
             const concede = event.impact?.concede_lambda_delta ?? event.impact?.defense;
             return (
-              <div key={event.id} className="rounded-lg border-l-4 bg-[var(--color-surface)] p-4" style={{ borderLeftColor: event.severity === "CRITICAL" ? "#e94560" : event.severity === "MAJOR" ? "#f59e0b" : "#3b82f6" }}>
+              <div key={event.id} className="dashboard-card border-l-2 p-4" style={{ borderLeftColor: event.severity === "CRITICAL" ? "var(--color-error)" : event.severity === "MAJOR" ? "var(--color-primary)" : "var(--color-accent)" }}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-xs text-[var(--color-text-muted)]">[{event.type_label ?? event.type}]</span>
                       <span className="text-xs text-[var(--color-primary)]">{event.team_name}</span>
                       <span className="font-semibold">{event.title}</span>
-                      <span className={event.impact_mode === "MATH"
-                        ? "rounded-full border border-[var(--color-gold)] bg-[var(--color-gold)]/15 px-2 py-0.5 text-xs text-[var(--color-gold)] shadow-[0_0_10px_rgba(245,158,11,0.16)]"
-                        : "rounded-full border border-dashed border-white/30 bg-transparent px-2 py-0.5 text-xs text-[var(--color-text-muted)]"
-                      }>
-                        {event.impact_mode === "MATH" ? "∑ 数学影响" : event.impact_mode === "NARRATIVE" ? "✦ AI 解读" : "数据无效"}
-                      </span>
-                      <span className={`rounded-full px-2 py-0.5 text-xs ${statusClass(event.status)}`}>{event.status_label ?? (event.active ? "生效中" : "已停用")}</span>
+                      <EventImpactBadge event={event} />
+                      <span className={`rounded-md border px-2 py-0.5 text-xs ${statusClass(event.status)}`}>{event.status_label ?? (event.active ? "生效中" : "已停用")}</span>
                     </div>
                     <p className="mt-1 text-xs text-[var(--color-text-muted)]">所属赛事：{event.tournament?.name_cn ?? "未关联赛事"} · 严重程度：{event.severity_label ?? event.severity}</p>
                   </div>
@@ -424,9 +421,9 @@ export default function AdminEventsPage() {
                   <p>来源：{sourceTypeLabel(event.source_type)} · {event.source || "未填写来源"}{event.source_url && <> · <a href={event.source_url} target="_blank" rel="noreferrer" className="text-[var(--color-primary)]">查看来源</a></>}</p>
                 </div>
                 <div className="mt-3 flex gap-2">
-                  <button onClick={() => startEdit(event)} className="rounded border border-white/15 px-2 py-1 text-xs">修改</button>
-                  <button onClick={() => toggleMutation.mutate({ id: event.id, active: !event.active })} className="rounded border border-white/15 px-2 py-1 text-xs">{event.active ? "停用" : "恢复"}</button>
-                  <button onClick={() => { if (confirm("确定删除此事件？")) deleteMutation.mutate(event.id); }} className="rounded border border-[var(--color-accent)]/30 px-2 py-1 text-xs text-[var(--color-accent)]">删除</button>
+                  <button onClick={() => startEdit(event)} className="rounded-md border border-[var(--color-border)] px-2.5 py-1 text-xs hover:border-[var(--color-primary)]">修改</button>
+                  <button onClick={() => toggleMutation.mutate({ id: event.id, active: !event.active })} className="rounded-md border border-[var(--color-border)] px-2.5 py-1 text-xs hover:border-[var(--color-primary)]">{event.active ? "停用" : "恢复"}</button>
+                  <button onClick={() => { if (confirm("确定删除此事件？")) deleteMutation.mutate(event.id); }} className="rounded-md border border-[var(--color-error)]/30 px-2.5 py-1 text-xs text-[var(--color-error)]">删除</button>
                 </div>
               </div>
             );

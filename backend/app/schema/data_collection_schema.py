@@ -30,3 +30,13 @@ class DataCollectionSourceResponse(BaseModel):
     id: str
     name: str
     url: str
+
+
+class DataCollectionProcessResponse(BaseModel):
+    run_id: int
+    status: CollectionRunStatus
+    raw_record_count: int = Field(ge=0)
+    updated_team_count: int = Field(ge=0)
+    skipped_team_count: int = Field(ge=0)
+    errors: list[str] = Field(default_factory=list)
+    message: str

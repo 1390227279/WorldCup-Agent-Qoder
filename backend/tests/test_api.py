@@ -677,6 +677,18 @@ class TestBracketEndpoint:
         assert scenario_body["model"]["seed"] == baseline_body["model"]["seed"]
         assert scenario_body["scenario"]["type"] == "EVENT"
 
+    async def test_collection_source_registry_rejects_arbitrary_urls(self, client):
+        sources = await client.get("/api/v1/data-sources/fetch-sources")
+        assert sources.status_code == 200
+        assert [item["id"] for item in sources.json()] == ["openfootball_worldcup_2022"]
+
+        rejected = await client.post("/api/v1/data-sources/collect/https://attacker.invalid/data")
+        assert rejected.status_code == 404
+
+        runs = await client.get("/api/v1/data-sources/collection-runs")
+        assert runs.status_code == 200
+        assert runs.json() == []
+
     async def test_data_sources_expose_verifiable_snapshot_and_transparency_notice(self, client):
         response = await client.get("/api/v1/data-sources")
         assert response.status_code == 200

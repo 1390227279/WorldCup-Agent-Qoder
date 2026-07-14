@@ -24,3 +24,9 @@ class DataCollectionRunResponse(BaseModel):
     updated_team_count: int = Field(ge=0)
     skipped_team_count: int = Field(ge=0)
     error_message: str | None
+
+
+class DataCollectionSourceResponse(BaseModel):
+    id: str
+    name: str
+    url: str

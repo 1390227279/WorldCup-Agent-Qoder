@@ -17,6 +17,7 @@ from app.models.tournament import (
 EVENT_METADATA_MIGRATION_VERSION = "20260713_event_metadata_v1"
 TOURNAMENT_DOMAIN_MIGRATION_VERSION = "20260714_tournament_domain_v1"
 DATA_COLLECTION_LEDGER_MIGRATION_VERSION = "20260714_data_collection_ledger_v1"
+HISTORICAL_MATCHES_MIGRATION_VERSION = "20260715_historical_matches_v1"
 
 def _migrate_event_metadata(connection) -> None:
     tables = set(inspect(connection).get_table_names())
@@ -163,11 +164,34 @@ def _migrate_data_collection_ledger(connection) -> None:
     ))
 
 
+def _migrate_historical_matches(connection) -> None:
+    connection.execute(text(
+        "CREATE TABLE IF NOT EXISTS historical_matches ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, match_date DATE NOT NULL, "
+        "tournament VARCHAR(200) NOT NULL, stage VARCHAR(100) NOT NULL, "
+        "home_team_id INTEGER REFERENCES teams(id), away_team_id INTEGER REFERENCES teams(id), "
+        "home_fifa_code VARCHAR(3) NOT NULL, away_fifa_code VARCHAR(3) NOT NULL, "
+        "home_goals INTEGER NOT NULL, away_goals INTEGER NOT NULL, "
+        "source_name VARCHAR(100) NOT NULL, "
+        "source_run_id INTEGER NOT NULL REFERENCES data_collection_runs(id), "
+        "external_match_id VARCHAR(200), match_fingerprint VARCHAR(64) NOT NULL UNIQUE, "
+        "created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+    ))
+    for statement in (
+        "CREATE INDEX IF NOT EXISTS ix_historical_matches_date ON historical_matches (match_date)",
+        "CREATE INDEX IF NOT EXISTS ix_historical_matches_home_team ON historical_matches (home_team_id)",
+        "CREATE INDEX IF NOT EXISTS ix_historical_matches_away_team ON historical_matches (away_team_id)",
+        "CREATE INDEX IF NOT EXISTS ix_historical_matches_source_run ON historical_matches (source_run_id)",
+    ):
+        connection.execute(text(statement))
+
+
 Migration = tuple[str, Callable]
 MIGRATIONS: tuple[Migration, ...] = (
     (EVENT_METADATA_MIGRATION_VERSION, _migrate_event_metadata),
     (TOURNAMENT_DOMAIN_MIGRATION_VERSION, _migrate_tournament_domain),
     (DATA_COLLECTION_LEDGER_MIGRATION_VERSION, _migrate_data_collection_ledger),
+    (HISTORICAL_MATCHES_MIGRATION_VERSION, _migrate_historical_matches),
 )
 MIGRATION_VERSIONS = tuple(version for version, _ in MIGRATIONS)
 

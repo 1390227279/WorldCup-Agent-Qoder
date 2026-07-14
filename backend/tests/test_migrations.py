@@ -148,3 +148,16 @@ def test_data_collection_ledger_migration_is_additive_and_idempotent(tmp_path):
         assert run == ("world_football_elo", "COMPLETED", 46, 2)
         assert connection.execute(text("SELECT name FROM teams WHERE id = 1")).scalar_one() == "Argentina"
         assert _applied_versions(connection) == set(MIGRATION_VERSIONS)
+
+
+def test_historical_matches_migration_preserves_existing_data(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'history.db'}")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE teams (id INTEGER PRIMARY KEY, name VARCHAR(100))"))
+        connection.execute(text("INSERT INTO teams VALUES (1, 'Argentina'), (2, 'France')"))
+        run_migrations(connection)
+        run_migrations(connection)
+        columns = {column["name"] for column in inspect(connection).get_columns("historical_matches")}
+        assert {"match_date", "home_fifa_code", "away_fifa_code", "source_run_id", "match_fingerprint"} <= columns
+        assert connection.execute(text("SELECT count(*) FROM teams")).scalar_one() == 2
+        assert _applied_versions(connection) == set(MIGRATION_VERSIONS)

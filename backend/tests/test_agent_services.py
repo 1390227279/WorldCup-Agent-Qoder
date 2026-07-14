@@ -164,3 +164,92 @@ class TestAgentReportContract:
         properties = tool["function"]["parameters"]["properties"]
         assert properties["key_factors"]["items"]["description"] == "必须使用简体中文"
         assert properties["reasoning_chain"]["items"]["properties"]["finding"]["description"] == "必须使用简体中文"
+
+    @pytest.mark.asyncio
+    async def test_plain_chinese_response_is_converted_to_stable_report(self):
+        class PlainTextQwenClient:
+            calls = 0
+
+            async def chat_with_tools(self, messages, tools):
+                self.calls += 1
+                return DashScopeResponse(content=(
+                    "阿根廷中场控制更加稳定。\n"
+                    "西班牙仍可能通过高位压迫制造机会。\n"
+                    "该代表路径并不是唯一可能结果。"
+                ))
+
+        class EmptyToolRegistry:
+            @staticmethod
+            def get_tools():
+                return []
+
+        client = PlainTextQwenClient()
+        result = await AgentService(client, EmptyToolRegistry()).analyze_simulated_match({
+            "home_team": {"name": "Spain", "name_cn": "西班牙"},
+            "away_team": {"name": "Argentina", "name_cn": "阿根廷"},
+            "predicted_score": "0-1",
+        }, None)
+
+        assert result.is_valid is True
+        assert client.calls == 2
+        assert result.cleaned_data.key_factors[0] == "阿根廷中场控制更加稳定。"
+        assert result.cleaned_data.reasoning_chain[0].step_number == 1
+        assert result.cleaned_data.reasoning_chain[0].tool_used == "qwen_text_fallback"
+
+    @pytest.mark.asyncio
+    async def test_final_submission_retry_accepts_submit_tool(self):
+        class RetryQwenClient:
+            calls = 0
+
+            async def chat_with_tools(self, messages, tools):
+                self.calls += 1
+                if self.calls == 1:
+                    return DashScopeResponse(content="我已经完成分析，但暂未调用提交工具。")
+                return DashScopeResponse(tool_calls=[ToolCall(
+                    id="submit-final",
+                    name="submit_match_analysis",
+                    arguments={
+                        "key_factors": ["阿根廷把握机会的能力更强"],
+                        "risk_notes": ["单场淘汰赛仍有偶然性"],
+                        "reasoning_chain": [{"step_number": 1, "finding": "读取数学比分"}],
+                    },
+                )])
+
+        class EmptyToolRegistry:
+            @staticmethod
+            def get_tools():
+                return []
+
+        client = RetryQwenClient()
+        result = await AgentService(client, EmptyToolRegistry()).analyze_simulated_match({
+            "home_team": {"name": "Spain", "name_cn": "西班牙"},
+            "away_team": {"name": "Argentina", "name_cn": "阿根廷"},
+            "predicted_score": "0-1",
+        }, None)
+        assert result.is_valid is True
+        assert client.calls == 2
+        assert result.cleaned_data.key_factors == ["阿根廷把握机会的能力更强"]
+
+    @pytest.mark.asyncio
+    async def test_plain_text_survives_failed_final_retry(self):
+        class FailingRetryClient:
+            calls = 0
+
+            async def chat_with_tools(self, messages, tools):
+                self.calls += 1
+                if self.calls == 1:
+                    return DashScopeResponse(content="阿根廷在既有数学路径中把握住了关键机会。")
+                raise TimeoutError("最终结构化提交超时")
+
+        class EmptyToolRegistry:
+            @staticmethod
+            def get_tools():
+                return []
+
+        result = await AgentService(FailingRetryClient(), EmptyToolRegistry()).analyze_simulated_match({
+            "home_team": {"name": "Spain", "name_cn": "西班牙"},
+            "away_team": {"name": "Argentina", "name_cn": "阿根廷"},
+            "predicted_score": "0-1",
+        }, None)
+        assert result.is_valid is True
+        assert result.cleaned_data.key_factors == ["阿根廷在既有数学路径中把握住了关键机会。"]

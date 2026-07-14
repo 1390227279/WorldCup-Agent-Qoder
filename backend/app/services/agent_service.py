@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from typing import Optional
 
@@ -97,6 +98,7 @@ class AgentService:
         tools.append(self._submit_match_analysis_tool_def())
 
         report_data: Optional[dict] = None
+        last_text_response = ""
         tool_records: list[ToolCallRecord] = []
         for _round_num in range(MAX_ROUNDS):
             response = await self.qwen_client.chat_with_tools(messages, tools)
@@ -144,13 +146,46 @@ class AgentService:
                     break
                 continue
             if response.content:
+                last_text_response = response.content.strip()
                 report_data = self._try_parse_report_from_text(response.content)
             break
 
         if report_data is None:
+            try:
+                final_response = await self.qwen_client.chat_with_tools(
+                    [
+                        {"role": "system", "content": SIMULATED_MATCH_ANALYSIS_PROMPT},
+                        {
+                            "role": "user",
+                            "content": (
+                                "停止继续调用分析工具。请根据以下既有数学上下文，"
+                                "立即调用 submit_match_analysis 提交最终中文报告。\n"
+                                f"{json.dumps(match_context, ensure_ascii=False)}"
+                            ),
+                        },
+                    ],
+                    [self._submit_match_analysis_tool_def()],
+                )
+                report_data = next(
+                    (
+                        call.arguments
+                        for call in final_response.tool_calls
+                        if call.name == "submit_match_analysis"
+                    ),
+                    None,
+                )
+                if report_data is None and final_response.content:
+                    last_text_response = final_response.content.strip()
+                    report_data = self._try_parse_report_from_text(final_response.content)
+            except Exception:
+                # The first Qwen response is still useful when the strict retry fails.
+                report_data = None
+            if report_data is None and last_text_response:
+                report_data = self._report_from_plain_text(last_text_response)
+        if report_data is None:
             return AgentReportValidationResult(
                 is_valid=False,
-                errors=["智能分析未提交解释报告"],
+                errors=["智能分析未返回可用内容"],
             )
         report_data["tool_calls_log"] = [
             record.model_dump() for record in tool_records
@@ -390,3 +425,32 @@ class AgentService:
         except (json.JSONDecodeError, ValueError):
             pass
         return None
+
+    @staticmethod
+    def _report_from_plain_text(text: str) -> dict:
+        """Convert readable Qwen prose into the stable frontend report contract."""
+        cleaned = re.sub(r"```(?:json)?|```", "", text, flags=re.IGNORECASE)
+        candidates = []
+        for part in re.split(r"[\n\r]+|(?<=[。！？；])", cleaned):
+            line = re.sub(r"^\s*(?:[-*•]|\d+[.)、])\s*", "", part).strip()
+            if len(line) >= 5 and line not in candidates:
+                candidates.append(line)
+        if not candidates:
+            candidates = ["Qwen 已完成战术解释，但未按结构化工具格式提交报告。"]
+        factors = candidates[:5]
+        reasoning = [
+            {
+                "step_number": index,
+                "tool_used": "qwen_text_fallback",
+                "finding": item,
+                "analysis": "该内容来自 Qwen 的中文文本响应，后端已转换为稳定展示结构。",
+            }
+            for index, item in enumerate(candidates[:6], start=1)
+        ]
+        return {
+            "key_factors": factors,
+            "risk_notes": [
+                "代表路径只是可复现的模拟样本，实际比赛仍受临场状态和随机事件影响。"
+            ],
+            "reasoning_chain": reasoning,
+        }

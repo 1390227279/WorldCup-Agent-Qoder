@@ -22,6 +22,7 @@ class DataPipelineService:
         self.parser = parser or DataParserService()
 
     async def process(self, run: DataCollectionRun, db: AsyncSession) -> PipelineResult:
+        run_id = run.id
         try:
             parsed = self.parser.parse_run(run)
             if run.source_name == "openfootball":
@@ -41,7 +42,7 @@ class DataPipelineService:
             raise ValueError(f"没有适用于 {run.source_name} 的加载流程")
         except Exception as exc:
             await db.rollback()
-            persisted = await db.get(DataCollectionRun, run.id)
+            persisted = await db.get(DataCollectionRun, run_id)
             if persisted is not None and persisted.status != "COMPLETED":
                 persisted.status = "FAILED"; persisted.error_message = str(exc)[:2000]
                 persisted.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)

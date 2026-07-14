@@ -5,19 +5,20 @@ import HomePage from "./pages/HomePage";
 import BracketSandboxPage from "./pages/BracketSandboxPage";
 import TeamPage from "./pages/TeamPage";
 import AdminEventsPage from "./pages/AdminEventsPage";
+import DashboardShell from "./components/DashboardShell";
 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)]">
+        <DashboardShell>
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/bracket" element={<BracketSandboxPage />} />
             <Route path="/team/:id" element={<TeamPage />} />
             <Route path="/admin/events" element={<AdminEventsPage />} />
           </Routes>
-        </div>
+        </DashboardShell>
       </BrowserRouter>
     </QueryClientProvider>
   );

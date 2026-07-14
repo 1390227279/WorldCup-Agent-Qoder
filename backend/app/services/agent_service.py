@@ -6,10 +6,12 @@ import json
 import time
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.team import Team
+from app.models.historical_match import HistoricalMatch
+from app.models.data_collection import DataCollectionRun
 from app.schema.prediction_schema import (
     AgentReportInput,
     AgentReportValidationResult,
@@ -18,7 +20,6 @@ from app.schema.prediction_schema import (
 )
 from app.services.data_collector import (
     BUILTIN_FIFA_RANKINGS,
-    BUILTIN_HISTORICAL_MATCHES,
 )
 from app.services.elo_engine import elo_to_win_probability, normalize_elo
 from app.services.qwen_client import QwenClient
@@ -247,9 +248,9 @@ class AgentService:
             if tool_name == "get_fifa_ranking":
                 return await self._tool_get_fifa_ranking(arguments, db_session)
             if tool_name == "get_recent_form":
-                return self._tool_get_recent_form(arguments)
+                return await self._tool_get_recent_form(arguments, db_session)
             if tool_name == "get_h2h_record":
-                return self._tool_get_h2h_record(arguments)
+                return await self._tool_get_h2h_record(arguments, db_session)
             return f"当前分析不允许调用工具：{tool_name}"
         except Exception as exc:
             return f"工具执行出错：{exc}"
@@ -257,7 +258,11 @@ class AgentService:
     @staticmethod
     async def _find_team(team_name: str, db: AsyncSession) -> Team | None:
         result = await db.execute(
-            select(Team).where(Team.name.ilike(f"%{team_name}%"))
+            select(Team).where(or_(
+                Team.name.ilike(f"%{team_name}%"),
+                Team.name_cn.ilike(f"%{team_name}%"),
+                Team.fifa_code.ilike(team_name),
+            ))
         )
         return result.scalars().first()
 
@@ -294,55 +299,35 @@ class AgentService:
             f"足联：{team.confederation}"
         )
 
-    @staticmethod
-    def _tool_get_recent_form(args: dict) -> str:
-        team_name = args.get("team_name", "")
-        name_lower = team_name.lower()
-        matches = [
-            match
-            for match in BUILTIN_HISTORICAL_MATCHES
-            if name_lower in match.home_team.lower()
-            or name_lower in match.away_team.lower()
-            or match.home_team.lower() in name_lower
-            or match.away_team.lower() in name_lower
-        ]
-        matches.sort(key=lambda match: match.date, reverse=True)
-        recent = matches[:int(args.get("n_matches", 10))]
-        if not recent:
-            return f"未找到 {team_name} 的历史比赛记录。"
-        lines = [f"{team_name} 最近 {len(recent)} 场比赛："]
-        lines.extend(
-            f"{match.date} [{match.stage}] {match.home_team} "
-            f"{match.home_goals}-{match.away_goals} {match.away_team}"
-            for match in recent
-        )
-        return "\n".join(lines)
+    async def _tool_get_recent_form(self, args: dict, db: AsyncSession) -> str:
+        team = await self._find_team(args.get("team_name", ""), db)
+        if not team: return f"未找到球队：{args.get('team_name', '')}"
+        limit = max(1, min(int(args.get("n_matches", 10)), 20))
+        matches = list((await db.execute(select(HistoricalMatch).where(or_(
+            HistoricalMatch.home_team_id == team.id, HistoricalMatch.away_team_id == team.id,
+        )).order_by(HistoricalMatch.match_date.desc()).limit(limit))).scalars())
+        if not matches: return f"暂无 {team.name_cn} 的已采集历史比赛；未使用硬编码数据替代。"
+        return await self._format_history(f"{team.name_cn} 最近 {len(matches)} 场已采集比赛：", matches, db)
+
+    async def _tool_get_h2h_record(self, args: dict, db: AsyncSession) -> str:
+        team_a = await self._find_team(args.get("team_a", ""), db); team_b = await self._find_team(args.get("team_b", ""), db)
+        if not team_a or not team_b: return "无法匹配历史交锋查询中的球队"
+        matches = list((await db.execute(select(HistoricalMatch).where(or_(
+            and_(HistoricalMatch.home_team_id == team_a.id, HistoricalMatch.away_team_id == team_b.id),
+            and_(HistoricalMatch.home_team_id == team_b.id, HistoricalMatch.away_team_id == team_a.id),
+        )).order_by(HistoricalMatch.match_date.desc()).limit(20))).scalars())
+        if not matches: return f"暂无 {team_a.name_cn} 与 {team_b.name_cn} 的已采集历史交锋；未使用硬编码数据替代。"
+        return await self._format_history(f"{team_a.name_cn} 与 {team_b.name_cn} 已采集交锋共 {len(matches)} 场：", matches, db)
 
     @staticmethod
-    def _tool_get_h2h_record(args: dict) -> str:
-        team_a = args.get("team_a", "").lower()
-        team_b = args.get("team_b", "").lower()
-        matches = [
-            match
-            for match in BUILTIN_HISTORICAL_MATCHES
-            if (
-                (team_a in match.home_team.lower() or match.home_team.lower() in team_a)
-                and (team_b in match.away_team.lower() or match.away_team.lower() in team_b)
-            ) or (
-                (team_b in match.home_team.lower() or match.home_team.lower() in team_b)
-                and (team_a in match.away_team.lower() or match.away_team.lower() in team_a)
-            )
-        ]
-        if not matches:
-            return f"未找到 {args.get('team_a')} 与 {args.get('team_b')} 的历史交锋。"
-        return "\n".join([
-            f"历史交锋共 {len(matches)} 场：",
-            *[
-                f"{match.date} [{match.tournament} {match.stage}] "
-                f"{match.home_team} {match.home_goals}-{match.away_goals} {match.away_team}"
-                for match in matches
-            ],
-        ])
+    async def _format_history(title: str, matches: list[HistoricalMatch], db: AsyncSession) -> str:
+        run_ids = {match.source_run_id for match in matches}
+        runs = list((await db.execute(select(DataCollectionRun).where(DataCollectionRun.id.in_(run_ids)))).scalars())
+        evidence = ", ".join(f"#{run.id} {run.source_name} {run.sha256_hash[:8] if run.sha256_hash else '无哈希'}" for run in runs)
+        lines = [title]
+        lines.extend(f"{m.match_date.isoformat()} [{m.tournament} {m.stage}] {m.home_fifa_code} {m.home_goals}-{m.away_goals} {m.away_fifa_code}" for m in matches)
+        lines.append(f"数据证据：{evidence}")
+        return "\n".join(lines)
 
     @staticmethod
     def _submit_match_analysis_tool_def() -> dict:

@@ -335,6 +335,41 @@ export interface DataProvenanceResponse {
   sources: DataSourceEvidence[];
 }
 
+export type DataCollectionStatus = "FETCHING" | "FETCHED" | "PROCESSING" | "COMPLETED" | "FAILED";
+
+export interface DataCollectionRun {
+  id: number;
+  source_name: string;
+  source_url: string | null;
+  started_at: string;
+  completed_at: string | null;
+  status: DataCollectionStatus;
+  http_status: number | null;
+  snapshot_path: string | null;
+  snapshot_bytes: number | null;
+  sha256_hash: string | null;
+  raw_record_count: number;
+  updated_team_count: number;
+  skipped_team_count: number;
+  error_message: string | null;
+}
+
+export interface DataCollectionSource {
+  id: string;
+  name: string;
+  url: string;
+}
+
+export interface DataCollectionProcessResult {
+  run_id: number;
+  status: DataCollectionStatus;
+  raw_record_count: number;
+  updated_team_count: number;
+  skipped_team_count: number;
+  errors: string[];
+  message: string;
+}
+
 export interface MatchOutcomeProbabilities {
   home_win: number;
   draw: number;

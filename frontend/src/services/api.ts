@@ -47,6 +47,10 @@ async function postJSON<T>(url: string, body?: unknown): Promise<T> {
 
 export const api = {
   getDataSources: () => fetchJSON<import("../types").DataProvenanceResponse>("/data-sources"),
+  getCollectionSources: () => fetchJSON<import("../types").DataCollectionSource[]>("/data-sources/fetch-sources"),
+  getCollectionRuns: (limit = 20) => fetchJSON<import("../types").DataCollectionRun[]>(`/data-sources/collection-runs?limit=${limit}`),
+  collectDataSource: (sourceId: string) => postJSON<import("../types").DataCollectionRun>(`/data-sources/collect/${encodeURIComponent(sourceId)}`),
+  processCollectionRun: (runId: number) => postJSON<import("../types").DataCollectionProcessResult>(`/data-sources/process/${runId}`),
   // Teams
   getTeams: () => fetchJSON<import("../types").Team[]>("/teams"),
   getTeam: (id: number) =>

@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine, inspect, text
 
+from app.models import Base
 from app.models.migrations import MIGRATION_VERSIONS, run_migrations
 
 
@@ -68,4 +69,19 @@ def test_tournament_migration_backfills_legacy_teams_idempotently(tmp_path):
             (1, "C", 1, "LEGACY", 1),
             (2, "D", 1, "LEGACY", 1),
         ]
+        team_columns = {
+            column["name"] for column in inspect(connection).get_columns("teams")
+        }
+        assert {"group_name", "pot"} <= team_columns
         assert _applied_versions(connection) == set(MIGRATION_VERSIONS)
+
+
+def test_new_database_does_not_create_legacy_team_tournament_columns():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with engine.connect() as connection:
+        columns = {
+            column["name"] for column in inspect(connection).get_columns("teams")
+        }
+    assert "group_name" not in columns
+    assert "pot" not in columns

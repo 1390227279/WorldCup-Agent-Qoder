@@ -58,7 +58,7 @@ export default function TeamPage() {
 
         <div className="mt-4 text-[var(--color-text-muted)] text-sm">
           <p>
-            小组：{team.group_name} · 第 {team.pot} 档
+            赛事：{team.tournament?.name_cn ?? "未关联赛事"} · 小组：{team.tournament?.group_name ?? "待定"} · 第 {team.tournament?.pot ?? "-"} 档
           </p>
           <p>历史最佳成绩：{team.stats?.world_cup_titles ? `${team.stats.world_cup_titles} 次夺冠` : "尚未夺冠"}</p>
         </div>
@@ -114,13 +114,6 @@ export default function TeamPage() {
         </div>
       )}
 
-      {/* Knockout Path — Phase 4 */}
-      <div className="bg-[var(--color-surface)] rounded-xl p-6">
-        <h2 className="text-xl font-semibold mb-2">🏁 预测晋级路径</h2>
-        <p className="text-[var(--color-text-muted)]">
-          智能推演完成后将在此展示完整晋级路径
-        </p>
-      </div>
     </div>
   );
 }

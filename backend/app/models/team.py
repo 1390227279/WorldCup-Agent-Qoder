@@ -16,8 +16,6 @@ class Team(Base):
     confederation = Column(String(10), nullable=False)
     fifa_ranking = Column(Integer, nullable=True)
     elo_rating = Column(Float, nullable=True)
-    group_name = Column(String(2), nullable=True)  # A-L
-    pot = Column(Integer, nullable=True)  # 1-4
     stats = Column(JSON, nullable=True)  # {"world_cup_titles": 2, "best_result": "Champion", ...}
 
     # Relationships
@@ -44,7 +42,5 @@ class Team(Base):
             "confederation": self.confederation,
             "fifa_ranking": self.fifa_ranking,
             "elo_rating": self.elo_rating,
-            "group_name": self.group_name,
-            "pot": self.pot,
             "stats": self.stats,
         }

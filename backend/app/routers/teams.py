@@ -1,6 +1,6 @@
 """Team-related API routes."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,11 +27,18 @@ async def list_teams(db: AsyncSession = Depends(get_db)):
     response = []
     for team, participant, tournament in result.all():
         data = team.to_dict()
-        data["group_name"] = participant.group_name
-        data["pot"] = participant.pot
-        data["qualification_status"] = participant.qualification_status
-        data["tournament_status"] = tournament.status
-        data["tournament_data_version"] = tournament.data_version
+        data["tournament"] = {
+            "id": tournament.id,
+            "code": tournament.code,
+            "name": tournament.name,
+            "name_cn": tournament.name_cn,
+            "year": tournament.year,
+            "status": tournament.status,
+            "data_version": tournament.data_version,
+            "group_name": participant.group_name,
+            "pot": participant.pot,
+            "qualification_status": participant.qualification_status,
+        }
         response.append(data)
     return response
 
@@ -42,7 +49,7 @@ async def get_team(team_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Team).where(Team.id == team_id))
     team = result.scalars().first()
     if not team:
-        return {"error": "Team not found"}, 404
+        raise HTTPException(status_code=404, detail="球队不存在")
     data = team.to_dict()
     participant_result = await db.execute(
         select(TournamentTeam, Tournament)
@@ -56,10 +63,17 @@ async def get_team(team_id: int, db: AsyncSession = Depends(get_db)):
     participant_row = participant_result.first()
     if participant_row:
         participant, tournament = participant_row
-        data["group_name"] = participant.group_name
-        data["pot"] = participant.pot
-        data["qualification_status"] = participant.qualification_status
-        data["tournament_status"] = tournament.status
-        data["tournament_data_version"] = tournament.data_version
+        data["tournament"] = {
+            "id": tournament.id,
+            "code": tournament.code,
+            "name": tournament.name,
+            "name_cn": tournament.name_cn,
+            "year": tournament.year,
+            "status": tournament.status,
+            "data_version": tournament.data_version,
+            "group_name": participant.group_name,
+            "pot": participant.pot,
+            "qualification_status": participant.qualification_status,
+        }
     data["events"] = [e.to_dict() for e in team.events if e.active]
     return data

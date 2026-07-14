@@ -1,4 +1,4 @@
-"""Small versioned SQLite migrations for preserving local demo data."""
+"""Ordered, additive SQLite migrations that preserve existing local data."""
 
 from collections.abc import Callable
 
@@ -16,10 +16,6 @@ from app.models.tournament import (
 
 EVENT_METADATA_MIGRATION_VERSION = "20260713_event_metadata_v1"
 TOURNAMENT_DOMAIN_MIGRATION_VERSION = "20260714_tournament_domain_v1"
-
-# Backward-compatible alias for existing imports.
-MIGRATION_VERSION = EVENT_METADATA_MIGRATION_VERSION
-
 
 def _migrate_event_metadata(connection) -> None:
     tables = set(inspect(connection).get_table_names())

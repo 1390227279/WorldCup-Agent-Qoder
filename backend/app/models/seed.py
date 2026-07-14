@@ -243,7 +243,11 @@ async def seed_all(session: AsyncSession):
     if seeded_legacy_data:
         team_map: dict[str, Team] = {}
         for data in TEAMS_SEED:
-            team = Team(**data)
+            team = Team(**{
+                key: value
+                for key, value in data.items()
+                if key not in {"group_name", "pot"}
+            })
             session.add(team)
             team_map[data["fifa_code"]] = team
 

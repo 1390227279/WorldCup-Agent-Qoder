@@ -1,13 +1,4 @@
-"""
-Phase 2-4 集成测试：Agent 服务核心模块。
-
-覆盖：
-  - CircuitBreaker 状态机（5 个测试）
-  - PoissonPredictor 比分预测（3 个测试）
-  - PredictionSchema 校验逻辑（4 个测试）
-
-Run: pytest tests/test_agent_services.py -v
-"""
+"""Circuit breaker, Poisson utility, and AI explanation contract tests."""
 
 import time
 
@@ -17,9 +8,7 @@ from app.services.circuit_breaker import CircuitBreaker, CircuitState
 from app.services.poisson_predictor import PoissonPredictor
 from app.schema.prediction_schema import (
     AgentReportInput,
-    PredictionInput,
     validate_agent_report,
-    validate_prediction,
 )
 from app.services.agent_service import AgentService
 
@@ -107,71 +96,7 @@ class TestPoissonPredictor:
         assert total == pytest.approx(1.0, abs=0.02)
 
 
-# ── PredictionSchema ──────────────────────────────────────
-
-
-_VALID_DATA = {
-    "winner": "Argentina",
-    "predicted_score": "2-1",
-    "confidence": 0.75,
-    "key_factors": ["ELO 评分优势", "近期状态良好", "历史交锋占优"],
-    "reasoning_chain": [
-        {
-            "step_number": 1,
-            "tool_used": "get_elo_rating",
-            "finding": "Argentina ELO 2120 位居第一",
-            "analysis": "综合实力最强",
-        }
-    ],
-    "tool_calls_log": [],
-}
-
-
-class TestPredictionSchema:
-    """Pydantic 校验函数测试。"""
-
-    def test_valid_data_passes(self):
-        """合法数据应通过校验（is_valid=True）。"""
-        data = PredictionInput(**_VALID_DATA)
-        result = validate_prediction(data)
-        assert result.is_valid is True
-        assert result.cleaned_data is not None
-        assert result.cleaned_data.winner == "Argentina"
-
-    def test_unknown_winner_invalid(self):
-        """winner 不在 48 队名单中 → is_valid=False。"""
-        payload = {**_VALID_DATA, "winner": "Atlantis FC"}
-        data = PredictionInput(**payload)
-        result = validate_prediction(data)
-        assert result.is_valid is False
-        assert any("未知" in e for e in result.errors)
-
-    def test_confidence_clamp_negative(self):
-        """confidence < 0 应自动修正为 0.0。"""
-        payload = {**_VALID_DATA, "confidence": -0.3}
-        data = PredictionInput(**payload)
-        result = validate_prediction(data)
-        assert result.is_valid is True
-        assert result.cleaned_data.confidence == 0.0
-        assert any("超出范围" in w for w in result.warnings)
-
-    def test_confidence_clamp_over_one(self):
-        """confidence > 1 应自动修正为 1.0。"""
-        payload = {**_VALID_DATA, "confidence": 1.5}
-        data = PredictionInput(**payload)
-        result = validate_prediction(data)
-        assert result.is_valid is True
-        assert result.cleaned_data.confidence == 1.0
-        assert any("超出范围" in w for w in result.warnings)
-
-    def test_empty_reasoning_chain_invalid(self):
-        """reasoning_chain 为空 → is_valid=False。"""
-        payload = {**_VALID_DATA, "reasoning_chain": None}
-        data = PredictionInput(**payload)
-        result = validate_prediction(data)
-        assert result.is_valid is False
-        assert any("reasoning_chain" in e for e in result.errors)
-
+class TestAgentReportContract:
     def test_agent_report_steps_are_renumbered_continuously(self):
         result = validate_agent_report(AgentReportInput(
             key_factors=["后端数学结果保持不变"],

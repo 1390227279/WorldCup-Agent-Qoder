@@ -88,8 +88,11 @@ class TestTeamsEndpoint:
         assert isinstance(data, list)
         assert len(data) == 48
         assert len({team["fifa_code"] for team in data}) == 48
-        assert {team["tournament_status"] for team in data} == {"SCENARIO"}
-        assert {team["qualification_status"] for team in data} == {"SCENARIO"}
+        assert {team["tournament"]["status"] for team in data} == {"SCENARIO"}
+        assert {
+            team["tournament"]["qualification_status"] for team in data
+        } == {"SCENARIO"}
+        assert all("group_name" not in team and "pot" not in team for team in data)
 
 
 class TestEventsEndpoint:
@@ -133,7 +136,7 @@ class TestEventsEndpoint:
             f"&baseline_simulation_id={initial_id}"
         )
         assert second_scenario.json()["simulation_id"] != first_scenario_id
-        assert second_scenario.json()["ignored_events"] == [
+        assert second_scenario.json()["scenario"]["ignored_events"] == [
             {"event_id": event_id, "reason": "inactive"}
         ]
         assert second_scenario.json()["baseline_simulation_id"] == initial_id
@@ -438,13 +441,9 @@ class TestPredictionsEndpoint:
 
 
 class TestBracketEndpoint:
-    async def test_bracket_returns_structure(self, client):
-        """GET /api/v1/bracket 应返回对阵树结构。"""
+    async def test_legacy_database_bracket_endpoint_is_removed(self, client):
         resp = await client.get("/api/v1/bracket")
-        assert resp.status_code == 200
-        body = resp.json()
-        assert "stages" in body
-        assert "total_matches" in body
+        assert resp.status_code == 404
 
     async def test_simulation_returns_complete_stable_bracket(self, client):
         first = await client.get("/api/v1/bracket/simulation?iterations=100")
@@ -453,49 +452,50 @@ class TestBracketEndpoint:
         assert body["simulation_id"]
         assert body["baseline_simulation_id"] == body["simulation_id"]
         assert body["scenario"]["type"] == "BASELINE"
-        assert body["summary"]["probability_leader"] == body["probability_leader"]
-        assert body["model"]["seed"] == body["seed"]
         assert body["tournament"]["data_version"] == "user-scenario-20260713-v1"
-        assert body["seed"] > 0
-        assert body["event_ids"] == []
-        assert {stage: len(body["stages"][stage]["matches"]) for stage in ("R32", "R16", "QF", "SF", "FINAL")} == {
+        assert body["model"]["seed"] > 0
+        assert body["scenario"]["requested_event_ids"] == []
+        stages = body["representative_path"]["stages"]
+        assert {stage: len(stages[stage]["matches"]) for stage in ("R32", "R16", "QF", "SF", "FINAL")} == {
             "R32": 16, "R16": 8, "QF": 4, "SF": 2, "FINAL": 1,
         }
         all_matches = [
             match
-            for stage in body["stages"].values()
+            for stage in stages.values()
             for match in stage["matches"]
         ]
         assert all(match["match_key"] for match in all_matches)
         assert all(match["home_team"]["id"] > 0 for match in all_matches)
         assert all(match["away_team"]["id"] > 0 for match in all_matches)
         assert all(match["winner_team_id"] > 0 for match in all_matches)
-        assert body["representative_path"]["champion"]["id"] == body[
+        assert body["representative_path"]["champion"]["id"] == body["summary"][
             "probability_leader"
         ]["team"]["id"]
-        assert body["stages"]["FINAL"]["matches"][0]["winner_team_id"] == body[
+        assert stages["FINAL"]["matches"][0]["winner_team_id"] == body["summary"][
             "probability_leader"
         ]["team"]["id"]
         assert all(len(match["source_slots"]) == 2 for match in all_matches)
         assert all(
             source.startswith("GROUP_")
-            for match in body["stages"]["R32"]["matches"]
+            for match in stages["R32"]["matches"]
             for source in match["source_slots"]
         )
-        assert set(body["stages"]["R16"]["matches"][0]["source_slots"]) == {
+        assert set(stages["R16"]["matches"][0]["source_slots"]) == {
             "R32-1", "R32-2"
         }
-        assert set(body["stages"]["FINAL"]["matches"][0]["source_slots"]) == {
+        assert set(stages["FINAL"]["matches"][0]["source_slots"]) == {
             "SF-1", "SF-2"
         }
-        assert body["stages"]["FINAL"]["matches"][0]["winner"] == body["predicted_champion"]
+        assert stages["FINAL"]["matches"][0]["winner_team_id"] == body[
+            "representative_path"
+        ]["champion"]["id"]
 
         cached = await client.get("/api/v1/bracket/simulation?iterations=100")
         assert cached.json()["simulation_id"] == body["simulation_id"]
 
         refreshed = await client.get("/api/v1/bracket/simulation?iterations=100&refresh=true")
         assert refreshed.json()["simulation_id"] != body["simulation_id"]
-        assert refreshed.json()["seed"] != body["seed"]
+        assert refreshed.json()["model"]["seed"] != body["model"]["seed"]
 
     async def test_simulation_returns_event_application_audit(self, client):
         teams = (await client.get("/api/v1/teams")).json()
@@ -516,15 +516,13 @@ class TestBracketEndpoint:
         body = response.json()
         assert body["scenario"]["type"] == "EVENT"
         assert body["baseline_simulation_id"] != body["simulation_id"]
-        assert body["model"]["seed"] == body["seed"]
-        assert body["requested_event_ids"] == [event_id, 999999]
-        assert body["event_ids"] == [event_id, 999999]
-        assert body["team_impacts"]["ARG"] == {
+        assert body["scenario"]["requested_event_ids"] == [event_id, 999999]
+        assert body["scenario"]["team_impacts"]["ARG"] == {
             "attack_lambda_delta": -0.1,
             "concede_lambda_delta": 0.0,
         }
-        assert [event["event_id"] for event in body["applied_events"]] == [event_id]
-        assert body["ignored_events"] == [
+        assert [event["event_id"] for event in body["scenario"]["applied_events"]] == [event_id]
+        assert body["scenario"]["ignored_events"] == [
             {"event_id": 999999, "reason": "not_found"}
         ]
 
@@ -539,14 +537,13 @@ class TestBracketEndpoint:
         assert first.status_code == second.status_code == 200
         first_body = first.json()
         second_body = second.json()
-        assert first_body["seed"] == second_body["seed"] == 20260713
-        assert first_body["input_fingerprint"] == second_body["input_fingerprint"]
-        assert first_body["champion_probs"] == second_body["champion_probs"]
-        assert first_body["advancement_probs"] == second_body["advancement_probs"]
-        assert first_body["stages"] == second_body["stages"]
+        assert first_body["model"]["seed"] == second_body["model"]["seed"] == 20260713
+        assert first_body["model"]["input_fingerprint"] == second_body["model"]["input_fingerprint"]
+        assert first_body["summary"] == second_body["summary"]
+        assert first_body["representative_path"] == second_body["representative_path"]
         assert all(
             match["decided_by"] in {"REGULAR_TIME", "PENALTIES"}
-            for stage in first_body["stages"].values()
+            for stage in first_body["representative_path"]["stages"].values()
             for match in stage["matches"]
         )
 

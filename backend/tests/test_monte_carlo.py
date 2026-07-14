@@ -24,8 +24,8 @@ def _teams():
             "name_cn": row["name_cn"],
             "fifa_code": row["fifa_code"],
             "elo_rating": 1500.0 + index,
-            "group_name": row["group_name"],
-            "pot": row["pot"],
+            "tournament_group": row["group_name"],
+            "tournament_pot": row["pot"],
         }
         for index, row in enumerate(rows)
     ]
@@ -38,11 +38,10 @@ def test_same_seed_produces_identical_probabilities_and_path():
 
     assert first["seed"] == second["seed"] == 20260713
     assert first["input_fingerprint"] == second["input_fingerprint"]
-    assert first["champion_probs"] == second["champion_probs"]
+    assert first["champion_probs_by_team_id"] == second["champion_probs_by_team_id"]
     assert first["advancement_probs"] == second["advancement_probs"]
     assert first["top3"] == second["top3"]
-    assert first["predicted_champion"] == second["predicted_champion"]
-    assert first["stages"] == second["stages"]
+    assert first["representative_path"] == second["representative_path"]
 
 
 def test_team_order_does_not_change_seeded_result():
@@ -54,8 +53,8 @@ def test_team_order_does_not_change_seeded_result():
     )
 
     assert forward["input_fingerprint"] == reverse["input_fingerprint"]
-    assert forward["champion_probs"] == reverse["champion_probs"]
-    assert forward["stages"] == reverse["stages"]
+    assert forward["champion_probs_by_team_id"] == reverse["champion_probs_by_team_id"]
+    assert forward["representative_path"] == reverse["representative_path"]
 
 
 def test_baseline_and_scenario_can_share_master_seed_without_mutating_teams():
@@ -140,7 +139,7 @@ def test_probability_leader_and_top3_use_id_based_champion_probabilities():
 
     assert leader["probability"] == max(result["champion_probs_by_team_id"].values())
     assert result["champion_probs_by_team_id"][leader_id] == leader["probability"]
-    assert result["top3_teams"][0] == leader
+    assert result["top3"][0] == leader
 
 
 def test_representative_path_replays_once_and_uses_probability_leader():
@@ -162,6 +161,5 @@ def test_representative_path_replays_once_and_uses_probability_leader():
     assert (
         representative["champion"]["id"] == result["probability_leader"]["team"]["id"]
     )
-    assert result["predicted_champion"] == representative["champion"]["name"]
-    assert representative["stages"] == result["stages"]
+    assert representative["stages"]["FINAL"]["matches"][0]["winner_team_id"] == representative["champion"]["id"]
     assert representative["log_likelihood"] < 0

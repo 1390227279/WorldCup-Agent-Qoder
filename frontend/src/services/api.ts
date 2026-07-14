@@ -54,22 +54,12 @@ export const api = {
     ),
 
   // Predictions
-  getChampion: () =>
-    fetchJSON<import("../types").ChampionPrediction>("/predictions/champion"),
-  getMatchPrediction: (id: number) =>
-    fetchJSON<import("../types").AgentPrediction>(`/predictions/match/${id}`),
   predictMatch: (simulationId: string, matchKey: string) =>
     postJSON<import("../types").MatchPredictionResponse>("/predictions/match", {
       simulation_id: simulationId,
       match_key: matchKey,
     }),
-  recalculate: () => postJSON<{ status: string }>("/predictions/recalculate"),
-
-  // Bracket
-  getBracket: () =>
-    fetchJSON<import("../types").BracketResponse>("/bracket"),
-  getBracketTeamPath: (teamId: number) =>
-    fetchJSON<import("../types").TeamBracketPath>(`/bracket/team/${teamId}`),
+  // Simulation
   getSimulation: (params?: SimulationParams) => {
     const p = new URLSearchParams();
     if (params?.event_ids) {
@@ -129,6 +119,4 @@ async function deleteJSON<T>(url: string): Promise<T> {
   return res.json();
 }
 
-// ── 具名导出（供 hooks 直接 import）─────────────────────
-export const fetchBracket = api.getBracket;
 export { postJSON, fetchJSON };

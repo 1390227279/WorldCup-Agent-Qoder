@@ -1,222 +1,121 @@
-<p align="center">
-  <h1 align="center">🏆 WorldCup Agent Predictor</h1>
-  <p align="center">
-    <strong>Agent-native 世界杯冠军预测系统</strong><br/>
-    Qwen 作为决策核心 · 自主调用工具链 · 逐场推理 · 可解释输出
-  </p>
-</p>
+# 世界杯情景预测系统
 
-<p align="center">
-  <img src="https://img.shields.io/badge/version-2.0.0-blue" alt="version">
-  <img src="https://img.shields.io/badge/python-3.11+-green" alt="python">
-  <img src="https://img.shields.io/badge/React-19-61dafb" alt="react">
-  <img src="https://img.shields.io/badge/TypeScript-6.0-3178c6" alt="typescript">
-  <img src="https://img.shields.io/badge/license-MIT-yellow" alt="license">
-</p>
+这是一个把“统计基线、事件情景、完整淘汰赛路径和单场 AI 解读”分开处理的世界杯预测应用。
 
----
+系统中的比赛结果由后端数学模型生成：ELO 表示球队基础实力，泊松分布生成比分，蒙特卡洛模拟统计各轮晋级与夺冠概率。Qwen 不决定比分、胜者或概率，只在用户点击一场比赛后，解释已经确定的数学结果。
 
-## 项目简介
+> 数据声明：当前 48 队阵容来自用户提供的非官方情景数据，赛事状态为 `SCENARIO`，不是 FIFA 官方参赛名单。中国等球队是否进入模拟，只取决于当前赛事的 `TournamentTeam` 参赛关系。
 
-WorldCup Agent Predictor 是一个 **Agent-native** 的 2026 世界杯冠军预测系统。与传统的"Python 模型计算 + LLM 写文案"不同，本系统将 **Qwen (通义千问) 作为决策核心**，Python 统计模型降级为 Agent 的工具箱。
+## 四个业务模块
 
-Qwen 自主决定调用哪些工具（ELO 评分、历史交锋、泊松模型、伤病事件等），综合多维度数据做出独立判断，输出包含完整推理链的结构化预测。
+| 模块 | 定位 | 数据来源 | AI 参与 |
+|---|---|---|---|
+| 首页 | 无事件基础实力大盘 | 同一批 ELO/泊松蒙特卡洛基线 | 不参与 |
+| 淘汰赛推演 | 事件修正后的平行情景 | 基线参数加事件对进球期望值的修正 | 不参与 |
+| 单场比赛详情 | 数学结果与战术解释 | 当前模拟中的比赛、比分、概率、期望进球和事件 | 只生成解释 |
+| 赛事事件管理 | 情景变量池 | 后台 CRUD 与 CSV/JSON 导入 | 不参与 |
 
-> 本项目参与 **阿里云天池 · Qoder 码力星期四 · 世界杯挑战赛**。
+首页与未选择事件的淘汰赛页面复用同一个 `simulation_id`。选择事件后，系统沿用基线主种子进行控制变量模拟，不会污染首页基线，也不会修改球队原始 ELO。
 
-## 核心设计理念
+## 模拟规则
 
-```
-传统架构                          Agent-native 架构 (本项目)
-┌──────────────────┐           ┌──────────────────────────┐
-│ Python 模型做决策  │           │ Qwen Agent 做决策         │
-│       ↓           │           │      ↓                   │
-│ LLM 润色文案      │           │ 自主调用 Python 工具获取数据│
-│                  │           │      ↓                   │
-│ AI = 翻译官       │           │ 综合多维度自主分析          │
-└──────────────────┘           │      ↓                   │
-                                │ 输出结构化预测 + 完整推理链  │
-                                │                          │
-                                │ Python = 工具箱           │
-                                └──────────────────────────┘
-```
-
-**三层容错防线**：Function Calling 格式约束 → Pydantic 输出校验 → CircuitBreaker 降级到泊松统计模型，确保 API 故障不破坏用户体验。
-
-**双通道事件注入**：静态基线（ELO / FIFA / 泊松）与动态事件（伤病、换帅、战术调整）并存，Qwen 动态解释事件权重，而非依赖固定公式。
+- 每次迭代完整模拟 12 个小组，再按“小组前两名 + 8 个最佳第三名”产生 32 强。
+- 当前非官方阵容使用产品固定规则 `scenario-fixed-v1` 生成 32 强对位。
+- 淘汰赛固定返回 32 强、16 强、八强、半决赛和决赛，共 `16/8/4/2/1` 场。
+- 每场比赛具有稳定的 `match_key`、来源槽位、比分、胜者和晋级关系。
+- 概率榜来自全部迭代的统计结果，不等同于某一次随机赛程。
+- 代表路径是在“夺冠概率第一球队最终夺冠”的真实模拟样本中，选择对数似然最高的一届完整赛事；模拟期间每支冠军球队只保留一个候选，最终仅重放一次，不全量保存或二次扫描 1000 棵对阵树。
 
 ## 技术栈
 
-| 层级 | 技术 |
-|------|------|
-| **后端框架** | FastAPI + Uvicorn (异步) |
-| **数据库** | SQLite + SQLAlchemy 2.0 (异步) |
-| **数据处理** | Pandas + NumPy + SciPy |
-| **Agent 决策** | Qwen Max (阿里云 DashScope Function Calling) |
-| **容错** | Tenacity 重试 + CircuitBreaker 熔断 |
-| **前端** | React 19 + TypeScript 6 + Vite 8 |
-| **样式** | TailwindCSS 4 + Framer Motion 12 |
-| **图表** | Recharts 2 |
-| **状态管理** | TanStack Query 5 |
-| **部署** | Docker + Nginx (目标阿里云 ECS) |
-
-## 项目结构
-
-```
-WorldCup-Agent-Qoder/
-├── backend/
-│   ├── app/
-│   │   ├── main.py                  # FastAPI 入口
-│   │   ├── config.py                # 配置管理 (环境变量)
-│   │   ├── models/                  # 数据库模型
-│   │   │   ├── team.py              # 球队 (48队)
-│   │   │   ├── match.py             # 比赛
-│   │   │   ├── event.py             # 动态事件 (伤病/换帅)
-│   │   │   ├── prediction.py        # Agent 预测记录
-│   │   │   ├── seed.py              # 种子数据 (启动时自动装载)
-│   │   │   └── database.py          # 数据库连接
-│   │   ├── routers/                 # API 路由
-│   │   │   ├── teams.py             # ✅ 球队接口
-│   │   │   ├── events.py            # ✅ 事件管理接口
-│   │   │   ├── predictions.py       # 🔧 Agent 预测接口
-│   │   │   └── bracket.py           # 🔧 对阵树接口
-│   │   ├── services/                # 业务逻辑
-│   │   │   ├── elo_engine.py        # ✅ ELO 评分引擎
-│   │   │   ├── data_collector.py    # ✅ 多源数据采集
-│   │   │   ├── data_processor.py    # ✅ 数据清洗校验
-│   │   │   ├── event_injector.py    # ✅ 事件注入服务
-│   │   │   ├── agent_service.py     # 🔜 Qwen Agent 编排
-│   │   │   ├── qwen_client.py       # 🔜 DashScope API
-│   │   │   ├── tool_registry.py     # 🔜 工具注册 (7个)
-│   │   │   ├── circuit_breaker.py   # 🔜 熔断器
-│   │   │   └── poisson_predictor.py # 🔜 泊松预测兜底
-│   │   ├── schema/                  # Pydantic 校验
-│   │   └── utils/
-│   ├── tests/
-│   │   └── test_data_pipeline.py    # ✅ 15条数据管道测试
-│   ├── requirements.txt
-│   └── Dockerfile
-├── frontend/
-│   ├── src/
-│   │   ├── App.tsx                  # 路由 + 全局配置
-│   │   ├── pages/
-│   │   │   ├── HomePage.tsx         # ✅ 冠军预测总览
-│   │   │   ├── TeamPage.tsx         # ✅ 球队详情
-│   │   │   ├── AdminEventsPage.tsx  # ✅ 事件管理面板
-│   │   │   └── BracketSandboxPage.tsx # 🔧 交互沙盘
-│   │   ├── components/
-│   │   │   ├── ChampionHero.tsx     # ✅ 冠军卡片 (动画)
-│   │   │   └── ProbabilityBar.tsx   # ✅ 概率柱状图 (动画)
-│   │   ├── services/api.ts          # API 调用层
-│   │   └── types/index.ts           # TypeScript 类型
-│   ├── package.json
-│   └── vite.config.ts
-├── docs/
-│   └── architecture.md              # 完整架构设计文档
-├── docker-compose.yml
-├── nginx.conf
-└── README.md
-```
-
-> ✅ = 已实现  🔧 = 桩代码 (待开发)  🔜 = 下一阶段
-
-## 开发进度
-
-| Phase | 内容 | 状态 |
-|-------|------|------|
-| Phase 0 | 项目骨架 + 48队种子数据 + React前端框架 + Docker配置 | ✅ 完成 |
-| Phase 1 | ELO引擎 + 数据采集清洗 + 事件注入 + 15条测试 | ✅ 完成 |
-| Phase 2 | Qwen Agent 编排 + 7工具注册 + 熔断器 + 泊松兜底 | 🔜 进行中 |
-| Phase 3 | 后端 API 补全 + 容错层 | ⬜ 待开始 |
-| Phase 4 | Bracket Sandbox 交互沙盘 + 可视化 | ⬜ 待开始 |
-| Phase 5 | 集成测试 + 性能优化 | ⬜ 待开始 |
-| Phase 6 | 阿里云 ECS 部署 | ⬜ 待开始 |
-| Phase 7 | 天池论坛发布 + 文档 | ⬜ 待开始 |
+- 后端：FastAPI、SQLAlchemy、SQLite、NumPy、SciPy、Pydantic
+- AI 解读：阿里云 DashScope Qwen、重试与熔断保护
+- 前端：React 19、TypeScript、Vite、Tailwind CSS、TanStack Query、Framer Motion、Recharts
+- 测试：Pytest、HTTPX、Oxlint、TypeScript/Vite 构建
 
 ## 快速开始
 
-### 环境要求
+环境要求：Python 3.11+、Node.js 20+、npm 10+。
 
-- Python 3.11+
-- Node.js 20+
-- npm 10+
+### 后端
 
-### 后端启动
-
-```bash
+```powershell
 cd backend
-
-# 安装依赖
-pip install -r requirements.txt --break-system-packages
-
-# 启动 (首次启动会自动创建数据库并装载48队种子数据)
+pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-访问 http://localhost:8000/docs 查看自动生成的 API 文档。
+可在 `backend/.env` 或启动进程的环境变量中配置：
 
-### 前端启动
+```dotenv
+QWEN_API_KEY=你的密钥
+QWEN_MODEL=qwen-max
+AGENT_TIMEOUT=15
+AGENT_MAX_RETRIES=2
+CIRCUIT_BREAKER_THRESHOLD=3
+CIRCUIT_BREAKER_RECOVERY=30
+DATABASE_URL=sqlite+aiosqlite:///./worldcup.db
+```
 
-```bash
+未配置 Qwen、调用超时或熔断时，模拟和数学比赛结果仍正常返回，单场详情只会显示“AI 暂时不可用”。
+
+### 前端
+
+```powershell
 cd frontend
-
-# 安装依赖
 npm install
-
-# 启动开发服务器
 npm run dev
 ```
 
-访问 http://localhost:5173 查看前端页面。
+前端默认访问 `http://localhost:5173`。API 文档属于后端开发工具，不在用户页面提供入口。
 
-### 验证
+## 当前 API
 
-```bash
-# 后端健康检查
-curl http://localhost:8000/api/v1/health
-# → {"status":"healthy","version":"2.0.0","agent":"qwen-max"}
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/v1/health` | 服务健康检查 |
+| GET | `/api/v1/teams` | 球队及当前赛事参赛信息 |
+| GET | `/api/v1/teams/{team_id}` | 球队详情与有效事件 |
+| GET | `/api/v1/bracket/simulation` | 基线或事件情景模拟 |
+| POST | `/api/v1/predictions/match` | 按 `simulation_id + match_key` 获取数学上下文和可选 AI 解读 |
+| GET/POST/PUT/DELETE | `/api/v1/events` | 赛事事件管理 |
+| GET/POST | `/api/v1/events/import/*` | 导入模板与批量导入 |
 
-# 查看全部 48 支球队
-curl http://localhost:8000/api/v1/teams
+模拟标准响应只保留：
 
-# 运行测试
-cd backend && python -m pytest tests/test_data_pipeline.py -v
-# → 15 passed
+```text
+simulation_id
+baseline_simulation_id
+scenario
+tournament
+model
+summary
+representative_path
 ```
 
-## API 概览
+旧的冠军、对阵树、重新计算和按球队查询等演示接口已移除。
 
-| 方法 | 路径 | 说明 | 状态 |
-|------|------|------|------|
-| GET | `/api/v1/health` | 健康检查 | ✅ |
-| GET | `/api/v1/teams` | 全部 48 支球队 | ✅ |
-| GET | `/api/v1/teams/{id}` | 球队详情 | ✅ |
-| GET | `/api/v1/events` | 活跃事件列表 | ✅ |
-| POST | `/api/v1/events` | 添加事件 | ✅ |
-| GET | `/api/v1/predictions/champion` | 冠军预测 | 🔧 |
-| GET | `/api/v1/predictions/bracket` | 完整对阵树 | 🔧 |
-| POST | `/api/v1/predictions/recalculate` | 情景重算 | 🔧 |
+## 验证
 
-## 架构亮点
+```powershell
+cd backend
+pytest -q
 
-### Agent-native 决策链
-
-每场比赛 Qwen 自主决定调用 3-5 个工具（ELO、近期状态、历史交锋、泊松模型、伤病事件），综合多维度数据后输出独立判断。Python 模型只提供数据，不做最终决策。
-
-### 三层容错
-
-```
-Layer 1: Function Calling 格式约束 → 确保 Qwen 输出结构化
-Layer 2: Pydantic 输出校验 → winner 必须在48队列表中
-Layer 3: CircuitBreaker → 连续失败3次 → 熔断30s → 自动降级到泊松统计模型
+cd ../frontend
+npm run build
+npm run lint
 ```
 
-前端通过 `is_agent` 字段感知降级状态，Agent 预测失败时自动展示"统计模型预测"标识。
+当前回归基线为后端 98 项测试通过，前端构建和静态检查通过。
 
-### 双通道事件注入
+## SQLite 升级策略
 
-静态基线（ELO 评分、FIFA 排名、近期战绩）与动态事件（姆巴佩伤病、巴西换帅、梅西最后一届等）同时在 Qwen 的上下文中呈现。Qwen 根据自己的分析动态调整事件的权重，而非使用固定公式。
+应用启动迁移采用有序版本注册表，并坚持“扩展、回填、切换读取、逻辑停用”：
 
-### Bracket Sandbox (WOW 页面)
+- 只进行建表、加列、加索引和数据回填。
+- 不在启动过程中删除列、修改列约束或重建大表。
+- 旧数据库中的 `teams.group_name`、`teams.pot` 物理列可以继续保留，但业务代码不再读取它们。
+- 新数据库直接把分组和档位写入 `tournament_teams`。
+- 如果未来需要物理清理旧列，应使用带备份、行数核对、外键检查和回滚能力的独立离线工具。
 
-Phase 4 核心页面——不是静态对阵图，而是支持情景切换、实时重算的交互式沙盘。评委可以切换"如果姆巴佩缺阵会怎样？"等预设情景，整个对阵树通过 Framer Motion 动画重绘。
+详细设计见 [架构说明](docs/architecture.md)。

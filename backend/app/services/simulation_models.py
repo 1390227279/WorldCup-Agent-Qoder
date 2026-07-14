@@ -32,8 +32,8 @@ class TeamSimulationInput:
     name_cn: str
     fifa_code: str
     elo_rating: float
-    group_name: str
-    pot: int | None = None
+    tournament_group: str
+    tournament_pot: int | None = None
     confederation: str | None = None
     fifa_ranking: int | None = None
     stats: dict[str, Any] | None = field(default=None, compare=False)
@@ -46,8 +46,11 @@ class TeamSimulationInput:
             name_cn=str(data["name_cn"]),
             fifa_code=str(data.get("fifa_code", "")).upper(),
             elo_rating=float(data.get("elo_rating") or 1500.0),
-            group_name=str(data.get("group_name", "")).upper(),
-            pot=int(data["pot"]) if data.get("pot") is not None else None,
+            tournament_group=str(data.get("tournament_group", "")).upper(),
+            tournament_pot=(
+                int(data["tournament_pot"])
+                if data.get("tournament_pot") is not None else None
+            ),
             confederation=data.get("confederation"),
             fifa_ranking=data.get("fifa_ranking"),
             stats=dict(data["stats"]) if data.get("stats") else None,
@@ -62,8 +65,6 @@ class TeamSimulationInput:
             "confederation": self.confederation,
             "fifa_ranking": self.fifa_ranking,
             "elo_rating": self.elo_rating,
-            "group_name": self.group_name,
-            "pot": self.pot,
             "stats": self.stats,
         }
 
@@ -106,7 +107,11 @@ class SimulationInput:
         normalized_teams = tuple(
             sorted(
                 (TeamSimulationInput.from_dict(team) for team in teams),
-                key=lambda team: (team.group_name, team.pot or 99, team.id),
+                key=lambda team: (
+                    team.tournament_group,
+                    team.tournament_pot or 99,
+                    team.id,
+                ),
             )
         )
         impacts = tuple(
@@ -141,7 +146,7 @@ class SimulationInput:
         if len({team.fifa_code for team in self.teams}) != len(self.teams):
             raise SimulationInputError("FIFA codes must be unique")
         group_counts = {
-            group: sum(team.group_name == group for team in self.teams)
+            group: sum(team.tournament_group == group for team in self.teams)
             for group in GROUP_NAMES
         }
         if any(count != 4 for count in group_counts.values()):
@@ -166,8 +171,8 @@ class SimulationInput:
                     "id": team.id,
                     "code": team.fifa_code,
                     "elo": team.elo_rating,
-                    "group": team.group_name,
-                    "pot": team.pot,
+                    "group": team.tournament_group,
+                    "pot": team.tournament_pot,
                 }
                 for team in self.teams
             ],

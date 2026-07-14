@@ -167,8 +167,8 @@ def build_simulation_context_key(
                 "id": team["id"],
                 "code": team["fifa_code"],
                 "elo": team["elo_rating"],
-                "group": team["group_name"],
-                "pot": team["pot"],
+                "group": team["tournament_group"],
+                "pot": team["tournament_pot"],
             }
             for team in sorted(teams, key=lambda item: item["id"])
         ],

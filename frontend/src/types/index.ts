@@ -6,9 +6,19 @@ export interface Team {
   confederation: string;
   fifa_ranking: number | null;
   elo_rating: number | null;
-  group_name: string | null;
-  pot: number | null;
   stats: TeamStats | null;
+  tournament?: {
+    id: number;
+    code: string;
+    name: string;
+    name_cn: string;
+    year: number;
+    status: string;
+    data_version: string;
+    group_name: string | null;
+    pot: number | null;
+    qualification_status: string;
+  };
 }
 
 export interface TeamStats {
@@ -27,26 +37,11 @@ export interface Match {
   away_score: number | null;
   is_simulated: boolean;
   match_order?: number | null;
-  prediction?: AgentPrediction | null;
   match_key?: string;
   winner_team_id?: number;
   winner?: string;
   source_slots?: string[];
   decided_by?: "REGULAR_TIME" | "PENALTIES";
-}
-
-export interface AgentPrediction {
-  id: number;
-  match_id: number;
-  winner: string | null;
-  predicted_score: string | null;
-  confidence: number | null;
-  key_factors: string[] | null;
-  reasoning_chain: ReasoningStep[] | null;
-  is_agent: boolean;
-  model_used: string | null;
-  tool_calls_log?: ToolCallRecord[] | null;
-  created_at?: string | null;
 }
 
 export interface ToolCallRecord {
@@ -145,21 +140,6 @@ export interface EventMetadata {
   severities: Record<string, string>;
   impact_fields: Record<string, string>;
   impact_range: { min: number; max: number };
-}
-
-export interface BracketNode {
-  match: Match;
-  prediction: AgentPrediction | null;
-  left: BracketNode | null;
-  right: BracketNode | null;
-  depth: number;
-  children?: [BracketNode, BracketNode] | null;
-}
-
-export interface ChampionPrediction {
-  team: Team;
-  probability: number;
-  key_factors: string[];
 }
 
 export interface SimulationProbabilityEntry {
@@ -297,28 +277,7 @@ export interface MatchAgentAnalysis {
   warnings: string[];
 }
 
-/** GET /bracket 响应 */
-export interface BracketResponse {
-  stages: Record<string, BracketStage>;
-  total_matches: number;
-}
-
 export interface BracketStage {
   label: string;
   matches: Match[];
-}
-
-/** GET /bracket/team/{id} 响应 */
-export interface TeamBracketPath {
-  team: Team;
-  knockout_path: KnockoutStep[];
-}
-
-export interface KnockoutStep {
-  stage: string;
-  round_name: string;
-  opponent: Team | null;
-  result: "W" | "L" | "D" | null;
-  score: string | null;
-  match_id: number;
 }

@@ -15,8 +15,6 @@ class SimulationTeam(BaseModel):
     confederation: str | None = None
     fifa_ranking: int | None = None
     elo_rating: float
-    group_name: str
-    pot: int | None = None
     stats: dict[str, Any] | None = None
 
 
@@ -140,7 +138,7 @@ class RepresentativePath(BaseModel):
 
 
 class SimulationResponse(BaseModel):
-    """Canonical response plus temporary legacy fields for the current frontend."""
+    """Canonical baseline or event-scenario response."""
 
     model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
@@ -151,24 +149,3 @@ class SimulationResponse(BaseModel):
     model: SimulationModelInfo
     summary: SimulationSummary
     representative_path: RepresentativePath
-
-    # Temporary compatibility fields removed after frontend Commit 09/10.
-    seed: int
-    event_ids: list[int]
-    requested_event_ids: list[int]
-    applied_events: list[AppliedScenarioEvent]
-    ignored_events: list[IgnoredScenarioEvent]
-    team_impacts: dict[str, dict[str, float]]
-    team_event_ids: dict[str, list[int]]
-    event_content_fingerprint: str
-    advancement_probs: dict[int, AdvancementProbability]
-    champion_probs_by_team_id: dict[int, float]
-    probability_leader: ProbabilityTeamEntry
-    top3_teams: list[ProbabilityTeamEntry]
-    champion_probs: dict[str, float]
-    top3: list[tuple[str, float]]
-    iterations: int
-    model_version: str
-    input_fingerprint: str
-    predicted_champion: str
-    stages: dict[str, SimulationStage]

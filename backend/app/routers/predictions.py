@@ -28,11 +28,6 @@ def _get_prediction_service() -> PredictionService:
     return _prediction_service
 
 
-@router.get("/champion")
-async def get_champion_prediction():
-    return {"message": "Phase 4 implementation"}
-
-
 @router.post("/match", response_model=SimulatedMatchAnalysisResponse)
 async def predict_match(
     req: SimulatedMatchAnalysisRequest,
@@ -59,18 +54,3 @@ async def predict_match(
         agent=agent_analysis,
         circuit_breaker=service.breaker.get_stats(),
     )
-
-
-@router.get("/match/{match_id}")
-async def get_match_prediction(match_id: int):
-    return {"status": "stub", "match_id": match_id, "message": "Phase 4 implementation"}
-
-
-@router.post("/recalculate")
-async def recalculate_predictions():
-    return {"status": "stub", "message": "Recalculation endpoint"}
-
-
-@router.get("/bracket")
-async def get_bracket_predictions():
-    return {"message": "Phase 4 implementation"}

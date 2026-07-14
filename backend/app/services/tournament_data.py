@@ -287,8 +287,6 @@ async def sync_tournament_dataset(
             confederation=defaults.confederation,
             fifa_ranking=defaults.fifa_ranking,
             elo_rating=defaults.elo_rating,
-            group_name=participant.group_name,
-            pot=participant.pot,
             stats=defaults.stats,
         )
         session.add(team)

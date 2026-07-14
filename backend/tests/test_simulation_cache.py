@@ -47,8 +47,8 @@ def test_targeted_event_invalidation_does_not_remove_baseline():
 
 def test_context_key_is_order_independent_and_versioned():
     teams = [
-        {"id": 2, "fifa_code": "BRA", "elo_rating": 2000, "group_name": "B", "pot": 1},
-        {"id": 1, "fifa_code": "ARG", "elo_rating": 2100, "group_name": "A", "pot": 1},
+        {"id": 2, "fifa_code": "BRA", "elo_rating": 2000, "tournament_group": "B", "tournament_pot": 1},
+        {"id": 1, "fifa_code": "ARG", "elo_rating": 2100, "tournament_group": "A", "tournament_pot": 1},
     ]
     arguments = {
         "tournament_id": 1,

@@ -18,8 +18,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="WorldCup Predictor Agent",
-    description="AI-powered FIFA World Cup 2026 prediction engine — Qwen Agent as decision core",
+    title="世界杯情景预测系统",
+    description="基于 ELO、泊松模型和蒙特卡洛模拟的世界杯情景推演；Qwen 仅生成单场战术解释",
     version="2.0.0",
     lifespan=lifespan,
 )

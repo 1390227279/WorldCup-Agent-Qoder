@@ -3,7 +3,6 @@
 import math
 import threading
 import time
-import uuid
 from collections import defaultdict
 from typing import Optional
 
@@ -131,7 +130,7 @@ class MonteCarloEngine:
                 team.name,
                 team.name_cn,
                 team.elo_rating,
-                team.group_name,
+                team.tournament_group,
                 team.fifa_code,
             )
             for team in simulation_input.teams
@@ -187,22 +186,13 @@ class MonteCarloEngine:
             "team": public_teams[probability_leader_id],
             "probability": champion_probs_by_team_id[probability_leader_id],
         }
-        top3_teams = [
+        top3 = [
             {
                 "team": public_teams[team_id],
                 "probability": champion_probs_by_team_id[team_id],
             }
             for team_id in ranked_team_ids[:3]
         ]
-
-        # Temporary compatibility fields for the current frontend. Commit 08/09
-        # will switch consumers to the ID-based canonical structures above.
-        probabilities = {
-            public_teams[team_id]["name"]: champion_probs_by_team_id[team_id]
-            for team_id in ranked_team_ids
-            if champion_probs_by_team_id[team_id] > 0
-        }
-        top3 = [(entry["team"]["name"], entry["probability"]) for entry in top3_teams]
 
         path_candidate = path_selector.for_champion(probability_leader_id)
         path_outcome = self._sim_one(
@@ -228,21 +218,15 @@ class MonteCarloEngine:
         }
 
         result = {
-            "simulation_id": uuid.uuid4().hex,
             "seed": master_seed,
-            "event_ids": list(simulation_input.event_ids),
             "advancement_probs": advancement_probs,
             "champion_probs_by_team_id": champion_probs_by_team_id,
             "probability_leader": probability_leader,
-            "top3_teams": top3_teams,
-            "representative_path": representative_path,
-            "champion_probs": probabilities,
             "top3": top3,
+            "representative_path": representative_path,
             "iterations": simulation_input.iterations,
             "model_version": MODEL_VERSION,
             "input_fingerprint": simulation_input.fingerprint(),
-            "predicted_champion": path_outcome.champion_name,
-            "stages": path_outcome.stages,
         }
         with self._lock:
             self._cache[cache_key] = (time.time(), result)
@@ -258,7 +242,7 @@ class MonteCarloEngine:
     ) -> str:
         team_part = ",".join(
             f"{team['id']}:{team.get('elo_rating') or 1500}:"
-            f"{team.get('group_name')}:{team.get('pot')}"
+            f"{team.get('tournament_group')}:{team.get('tournament_pot')}"
             for team in sorted(teams, key=lambda item: item["id"])
         )
         impact_part = ",".join(

@@ -91,11 +91,11 @@ function MatchDetailCard({ flatMatch, svgWidth }: { flatMatch: FlatMatch; svgWid
       <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-primary)", borderRadius: 12, padding: 14, fontSize: 12, color: "var(--color-text)", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
         <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>{STAGE_LABELS[match.stage] ?? match.stage}</div>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-          <span>{flagEmoji(match.home_team?.fifa_code)} {match.home_team?.name_cn ?? match.home_team?.name ?? "TBD"}</span>
+          <span>{flagEmoji(match.home_team?.fifa_code)} {match.home_team?.name_cn ?? match.home_team?.name ?? "待定"}</span>
           <span style={{ fontWeight: 700 }}>{match.home_score ?? "-"}</span>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-          <span>{flagEmoji(match.away_team?.fifa_code)} {match.away_team?.name_cn ?? match.away_team?.name ?? "TBD"}</span>
+          <span>{flagEmoji(match.away_team?.fifa_code)} {match.away_team?.name_cn ?? match.away_team?.name ?? "待定"}</span>
           <span style={{ fontWeight: 700 }}>{match.away_score ?? "-"}</span>
         </div>
         <div style={{ borderTop: "1px solid #333", paddingTop: 8, marginBottom: 6 }}>

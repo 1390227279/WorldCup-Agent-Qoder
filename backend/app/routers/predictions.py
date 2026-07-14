@@ -10,6 +10,8 @@ from app.models.database import get_db
 from app.schema.prediction_schema import (
     SimulatedMatchAnalysisRequest,
     SimulatedMatchAnalysisResponse,
+    TournamentReportRequest,
+    TournamentReportResponse,
 )
 from app.services.prediction_service import PredictionService
 from app.services.simulation_cache import get_simulation_cache
@@ -52,5 +54,21 @@ async def predict_match(
         match_key=req.match_key,
         math=math_context,
         agent=agent_analysis,
+        circuit_breaker=service.breaker.get_stats(),
+    )
+
+
+@router.post("/tournament-report", response_model=TournamentReportResponse)
+async def tournament_report(req: TournamentReportRequest):
+    simulation = get_simulation_cache().get_by_id(req.simulation_id)
+    if simulation is None:
+        raise HTTPException(status_code=404, detail="模拟上下文不存在或已过期，请重新加载推演")
+    service = _get_prediction_service()
+    math_summary = service.resolve_tournament(simulation)
+    agent_report = await service.analyze_tournament(math_summary)
+    return TournamentReportResponse(
+        simulation_id=req.simulation_id,
+        math=math_summary,
+        agent=agent_report,
         circuit_breaker=service.breaker.get_stats(),
     )

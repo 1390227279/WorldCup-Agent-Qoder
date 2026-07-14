@@ -9,7 +9,12 @@ from scipy.stats import poisson as poisson_distribution
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.schema.prediction_schema import MatchAgentAnalysis, MatchMathContext
+from app.schema.prediction_schema import (
+    MatchAgentAnalysis,
+    MatchMathContext,
+    TournamentAgentReport,
+    TournamentMathSummary,
+)
 from app.services.agent_service import AgentService
 from app.services.circuit_breaker import CircuitBreaker
 from app.services.monte_carlo import calculate_match_lambdas
@@ -125,6 +130,67 @@ class PredictionService:
             self.breaker.record_failure()
             logger.error("模拟比赛智能分析失败: %s", exc)
             return self._agent_unavailable("智能分析暂时不可用，数学结果仍然有效")
+
+    @staticmethod
+    def resolve_tournament(simulation: CachedSimulation) -> TournamentMathSummary:
+        response = simulation.response
+        representative = response["representative_path"]
+        final = representative["stages"]["FINAL"]["matches"][0]
+        champion_id = representative["champion"]["id"]
+        finalist = final["away_team"] if final["home_team"]["id"] == champion_id else final["home_team"]
+        qualifiers = [
+            {
+                "group": group_name,
+                "position": row["position"],
+                "team": row["team"]["name_cn"] or row["team"]["name"],
+                "points": row["points"],
+                "goal_difference": row["goal_difference"],
+                "qualification_type": row["qualification_type"],
+            }
+            for group_name, group in representative["group_stage"].items()
+            for row in group["standings"]
+            if row["qualified"]
+        ]
+        knockout_path = [
+            {
+                "stage": stage["label"],
+                "match": f'{match["home_team"]["name_cn"] or match["home_team"]["name"]} '
+                         f'{match["home_score"]}-{match["away_score"]} '
+                         f'{match["away_team"]["name_cn"] or match["away_team"]["name"]}',
+                "winner": match["winner"],
+                "decided_by": match["decided_by"],
+            }
+            for stage in representative["stages"].values()
+            for match in stage["matches"]
+        ]
+        leader = response["summary"]["probability_leader"]
+        return TournamentMathSummary(
+            simulation_id=simulation.simulation_id,
+            scenario_type=response["scenario"]["type"],
+            scenario_label=response["scenario"]["label"],
+            champion=representative["champion"],
+            final_score=f'{final["home_score"]}-{final["away_score"]}',
+            finalist=finalist,
+            probability_leader=leader["team"],
+            probability_leader_probability=leader["probability"],
+            top3=response["summary"]["top3"],
+            group_qualifiers=qualifiers,
+            knockout_path=knockout_path,
+            math_events=response["scenario"]["math_events"],
+            narrative_events=response["scenario"]["narrative_events"],
+        )
+
+    async def analyze_tournament(self, math_summary: TournamentMathSummary) -> TournamentAgentReport:
+        if self.breaker.is_open():
+            return TournamentAgentReport(status="agent_unavailable", message="AI 服务熔断中，数学推演结果仍然有效")
+        try:
+            report = await self.agent.analyze_tournament(math_summary.model_dump())
+            self.breaker.record_success()
+            return TournamentAgentReport(status="available", model_used=settings.qwen_model, **report)
+        except Exception as exc:
+            self.breaker.record_failure()
+            logger.error("冠军 AI 推演报告生成失败: %s", exc)
+            return TournamentAgentReport(status="agent_unavailable", message="冠军 AI 推演报告暂时不可用，数学推演结果仍然有效")
 
     @staticmethod
     def _agent_unavailable(

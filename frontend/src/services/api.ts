@@ -59,6 +59,10 @@ export const api = {
       simulation_id: simulationId,
       match_key: matchKey,
     }),
+  getTournamentReport: (simulationId: string) =>
+    postJSON<import("../types").TournamentReportResponse>("/predictions/tournament-report", {
+      simulation_id: simulationId,
+    }),
   // Simulation
   getSimulation: (params?: SimulationParams) => {
     const p = new URLSearchParams();

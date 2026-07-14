@@ -6,9 +6,10 @@ import BracketTree from "../components/BracketTree";
 import GroupStagePanel from "../components/GroupStagePanel";
 import MatchAnalysisPanel from "../components/MatchAnalysisPanel";
 import ScenarioSlider from "../components/ScenarioSlider";
+import TournamentReportPanel from "../components/TournamentReportPanel";
 import { usePredictions } from "../hooks/usePredictions";
 import { api, simulationQueryKeys } from "../services/api";
-import type { Match, SimulationResult } from "../types";
+import type { Match, SimulationResult, TournamentReportResponse } from "../types";
 
 const IGNORED_REASON_LABELS: Record<string, string> = {
   not_found: "事件不存在",
@@ -21,6 +22,10 @@ const IGNORED_REASON_LABELS: Record<string, string> = {
 
 export default function BracketSandboxPage() {
   const [viewMode, setViewMode] = useState<"groups" | "knockout">("groups");
+  const [reportOpen, setReportOpen] = useState(false);
+  const [report, setReport] = useState<TournamentReportResponse | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState<Error | null>(null);
   const [selectedEventIds, setSelectedEventIds] = useState<number[]>([]);
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const [scenarioSimulation, setScenarioSimulation] = useState<SimulationResult | null>(null);
@@ -118,6 +123,20 @@ export default function BracketSandboxPage() {
     }
   }, [predictMatch, resetPrediction, simulation]);
 
+  const openTournamentReport = async () => {
+    if (!simulation) return;
+    setReportOpen(true);
+    setReportLoading(true);
+    setReportError(null);
+    try {
+      setReport(await api.getTournamentReport(simulation.simulation_id));
+    } catch (caughtError) {
+      setReportError(caughtError instanceof Error ? caughtError : new Error("冠军 AI 报告生成失败"));
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
   const scenarioComparison = useMemo(() => {
     if (!baselineSimulation || !scenarioSimulation || scenarioSimulation.scenario.type !== "EVENT") return null;
     const affectedTeamIds = [...new Set(scenarioSimulation.scenario.math_events.map((event) => event.team_id))];
@@ -161,6 +180,7 @@ export default function BracketSandboxPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button type="button" onClick={() => void openTournamentReport()} disabled={!simulation || reportLoading} className="rounded-md border border-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-primary)] transition-colors hover:bg-[var(--color-primary)]/10 disabled:opacity-50">冠军 AI 报告</button>
           <span className="hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text-muted)] sm:inline-block">代表路径并非唯一赛果</span>
           <button type="button" onClick={() => void refreshSimulation()} disabled={isRefreshingSimulation} className="rounded-md bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-[#1c1d21] transition-colors hover:bg-[var(--color-primary-hover)] disabled:opacity-50">
             {isRefreshingSimulation ? "重新模拟中…" : "重新模拟"}
@@ -229,6 +249,14 @@ export default function BracketSandboxPage() {
       </div>
 
       <AnimatePresence>
+        {reportOpen && (
+          <motion.div className="fixed inset-0 z-50 flex justify-end" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <button type="button" aria-label="关闭冠军 AI 报告" onClick={() => setReportOpen(false)} className="absolute inset-0 bg-[#0d1114]/80" />
+            <motion.aside initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ duration: 0.3, ease: "easeOut" }} className="relative h-full w-full max-w-[760px] overflow-hidden border-l border-[var(--color-border)] shadow-[var(--shadow-panel)]">
+              <TournamentReportPanel report={report} loading={reportLoading} error={reportError} onClose={() => setReportOpen(false)} />
+            </motion.aside>
+          </motion.div>
+        )}
         {selectedMatch && (
           <motion.div className="fixed inset-0 z-50 flex justify-end" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <button type="button" aria-label="关闭 AI 战情面板" onClick={closeMatch} className="absolute inset-0 bg-[#0d1114]/80" />

@@ -677,6 +677,48 @@ class TestBracketEndpoint:
         assert scenario_body["model"]["seed"] == baseline_body["model"]["seed"]
         assert scenario_body["scenario"]["type"] == "EVENT"
 
+    async def test_tournament_report_uses_complete_simulation_context(self, client, monkeypatch):
+        from app.routers import predictions as predictions_router
+        from app.services.prediction_service import PredictionService
+
+        simulation = await client.get("/api/v1/bracket/simulation?iterations=100&seed=20260714")
+        simulation_body = simulation.json()
+        captured = {}
+
+        class FakeAgent:
+            async def analyze_tournament(self, context):
+                captured.update(context)
+                return {
+                    "champion_summary": "冠军沿既有代表路径完成夺冠。",
+                    "group_stage_reasoning": ["小组赛积分和晋级名额来自数学模拟。"],
+                    "knockout_reasoning": ["淘汰赛逐轮比分保持后端结果。"],
+                    "final_reasoning": "决赛解释不修改既有比分。",
+                    "key_factors": ["ELO 实力基线"],
+                    "event_analysis": [],
+                    "alternative_outcomes": ["代表路径不是唯一可能结果。"],
+                    "risk_notes": ["概率榜来自有限次数蒙特卡洛模拟。"],
+                    "reasoning_chain": [{"step_number": 1, "finding": "读取完整赛事路径"}],
+                }
+
+        service = PredictionService(agent_service=FakeAgent())
+        monkeypatch.setattr(predictions_router, "_prediction_service", service)
+        response = await client.post("/api/v1/predictions/tournament-report", json={
+            "simulation_id": simulation_body["simulation_id"],
+        })
+        assert response.status_code == 200
+        body = response.json()
+        final = simulation_body["representative_path"]["stages"]["FINAL"]["matches"][0]
+        assert body["math"]["champion"]["id"] == simulation_body["representative_path"]["champion"]["id"]
+        assert body["math"]["final_score"] == f'{final["home_score"]}-{final["away_score"]}'
+        assert len(body["math"]["group_qualifiers"]) == 32
+        assert len(body["math"]["knockout_path"]) == 31
+        assert captured["champion"] == body["math"]["champion"]
+        assert body["agent"]["status"] == "available"
+
+    async def test_tournament_report_rejects_expired_simulation(self, client):
+        response = await client.post("/api/v1/predictions/tournament-report", json={"simulation_id": "expired"})
+        assert response.status_code == 404
+
     async def test_event_scenario_rejects_unknown_baseline(self, client):
         response = await client.get(
             "/api/v1/bracket/simulation?iterations=100&event_ids=999999"

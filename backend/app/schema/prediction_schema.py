@@ -102,6 +102,50 @@ class SimulatedMatchAnalysisResponse(BaseModel):
     circuit_breaker: dict
 
 
+class TournamentReportRequest(BaseModel):
+    simulation_id: str = Field(min_length=1)
+
+
+class TournamentMathSummary(BaseModel):
+    simulation_id: str
+    scenario_type: Literal["BASELINE", "EVENT"]
+    scenario_label: str
+    champion: SimulationTeam
+    final_score: str
+    finalist: SimulationTeam
+    probability_leader: SimulationTeam
+    probability_leader_probability: float = Field(ge=0.0, le=1.0)
+    top3: list[dict]
+    group_qualifiers: list[dict]
+    knockout_path: list[dict]
+    math_events: list[AppliedScenarioEvent]
+    narrative_events: list[NarrativeScenarioEvent]
+
+
+class TournamentAgentReport(BaseModel):
+    model_config = {"protected_namespaces": ()}
+
+    status: Literal["available", "agent_unavailable"]
+    model_used: Optional[str] = None
+    message: Optional[str] = None
+    champion_summary: str = ""
+    group_stage_reasoning: list[str] = Field(default_factory=list)
+    knockout_reasoning: list[str] = Field(default_factory=list)
+    final_reasoning: str = ""
+    key_factors: list[str] = Field(default_factory=list)
+    event_analysis: list[str] = Field(default_factory=list)
+    alternative_outcomes: list[str] = Field(default_factory=list)
+    risk_notes: list[str] = Field(default_factory=list)
+    reasoning_chain: list[ReasoningStep] = Field(default_factory=list)
+
+
+class TournamentReportResponse(BaseModel):
+    simulation_id: str
+    math: TournamentMathSummary
+    agent: TournamentAgentReport
+    circuit_breaker: dict
+
+
 def validate_agent_report(data: AgentReportInput) -> AgentReportValidationResult:
     """Clean an explanation report and force continuous 1-based steps."""
     errors: list[str] = []

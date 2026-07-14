@@ -285,6 +285,40 @@ export interface MatchPredictionResponse {
   circuit_breaker: Record<string, unknown>;
 }
 
+export interface TournamentReportResponse {
+  simulation_id: string;
+  math: {
+    simulation_id: string;
+    scenario_type: "BASELINE" | "EVENT";
+    scenario_label: string;
+    champion: Team;
+    final_score: string;
+    finalist: Team;
+    probability_leader: Team;
+    probability_leader_probability: number;
+    top3: SimulationProbabilityEntry[];
+    group_qualifiers: Array<Record<string, unknown>>;
+    knockout_path: Array<{ stage: string; match: string; winner: string; decided_by: string }>;
+    math_events: SimulationScenario["math_events"];
+    narrative_events: SimulationScenario["narrative_events"];
+  };
+  agent: {
+    status: "available" | "agent_unavailable";
+    model_used: string | null;
+    message: string | null;
+    champion_summary: string;
+    group_stage_reasoning: string[];
+    knockout_reasoning: string[];
+    final_reasoning: string;
+    key_factors: string[];
+    event_analysis: string[];
+    alternative_outcomes: string[];
+    risk_notes: string[];
+    reasoning_chain: ReasoningStep[];
+  };
+  circuit_breaker: Record<string, unknown>;
+}
+
 export interface MatchOutcomeProbabilities {
   home_win: number;
   draw: number;

@@ -21,6 +21,8 @@ class DataCollectionRunResponse(BaseModel):
     snapshot_bytes: int | None = Field(default=None, ge=0)
     sha256_hash: str | None = Field(default=None, min_length=64, max_length=64)
     raw_record_count: int = Field(ge=0)
+    inserted_record_count: int = Field(ge=0)
+    duplicate_record_count: int = Field(ge=0)
     updated_team_count: int = Field(ge=0)
     skipped_team_count: int = Field(ge=0)
     error_message: str | None

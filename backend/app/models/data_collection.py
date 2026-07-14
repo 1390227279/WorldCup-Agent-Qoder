@@ -27,6 +27,8 @@ class DataCollectionRun(Base):
     snapshot_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     sha256_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     raw_record_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    inserted_record_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    duplicate_record_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     updated_team_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     skipped_team_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -44,6 +46,8 @@ class DataCollectionRun(Base):
             "snapshot_bytes": self.snapshot_bytes,
             "sha256_hash": self.sha256_hash,
             "raw_record_count": self.raw_record_count,
+            "inserted_record_count": self.inserted_record_count,
+            "duplicate_record_count": self.duplicate_record_count,
             "updated_team_count": self.updated_team_count,
             "skipped_team_count": self.skipped_team_count,
             "error_message": self.error_message,

@@ -18,6 +18,7 @@ EVENT_METADATA_MIGRATION_VERSION = "20260713_event_metadata_v1"
 TOURNAMENT_DOMAIN_MIGRATION_VERSION = "20260714_tournament_domain_v1"
 DATA_COLLECTION_LEDGER_MIGRATION_VERSION = "20260714_data_collection_ledger_v1"
 HISTORICAL_MATCHES_MIGRATION_VERSION = "20260715_historical_matches_v1"
+COLLECTION_COUNTERS_MIGRATION_VERSION = "20260715_collection_counters_v1"
 
 def _migrate_event_metadata(connection) -> None:
     tables = set(inspect(connection).get_table_names())
@@ -186,12 +187,22 @@ def _migrate_historical_matches(connection) -> None:
         connection.execute(text(statement))
 
 
+def _migrate_collection_counters(connection) -> None:
+    columns = {column["name"] for column in inspect(connection).get_columns("data_collection_runs")}
+    for name in ("inserted_record_count", "duplicate_record_count"):
+        if name not in columns:
+            connection.execute(text(
+                f"ALTER TABLE data_collection_runs ADD COLUMN {name} INTEGER NOT NULL DEFAULT 0"
+            ))
+
+
 Migration = tuple[str, Callable]
 MIGRATIONS: tuple[Migration, ...] = (
     (EVENT_METADATA_MIGRATION_VERSION, _migrate_event_metadata),
     (TOURNAMENT_DOMAIN_MIGRATION_VERSION, _migrate_tournament_domain),
     (DATA_COLLECTION_LEDGER_MIGRATION_VERSION, _migrate_data_collection_ledger),
     (HISTORICAL_MATCHES_MIGRATION_VERSION, _migrate_historical_matches),
+    (COLLECTION_COUNTERS_MIGRATION_VERSION, _migrate_collection_counters),
 )
 MIGRATION_VERSIONS = tuple(version for version, _ in MIGRATIONS)
 

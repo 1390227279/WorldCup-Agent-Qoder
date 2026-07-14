@@ -1,8 +1,8 @@
 {
-  "source": "World Football Elo Ratings (eloratings.net)",
+  "source": "Project curated ELO baseline; methodology reference: eloratings.net",
   "acquired_at": "2026-07-14T00:00:00Z",
   "effective_at": "2026-07-14",
-  "notice": "基线 ELO 数据，从公开 ELO 排名交叉核验后手工整理。后续通过爬虫自动化更新。",
+  "notice": "项目人工维护的可复现 ELO 起始基线，不是网络抓取的原始响应；后续必须通过专用适配器产生真实采集快照。",
   "teams": [
     {"fifa_code": "ARG", "elo": 2120.0, "effective_at": "2026-07-14"},
     {"fifa_code": "FRA", "elo": 2080.0, "effective_at": "2026-07-14"},

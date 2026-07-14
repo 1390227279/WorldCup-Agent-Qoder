@@ -64,6 +64,13 @@ class DataLoaderService:
             r for r in parsed.records if isinstance(r, TeamMetricRecord)
         ]
 
+        if parsed.source_name != run.source_name:
+            raise DataLoadError(
+                f"解析来源 {parsed.source_name} 与采集来源 {run.source_name} 不一致"
+            )
+        if not metric_records:
+            raise DataLoadError("当前快照不包含可加载的球队指标")
+
         result = LoadResult()
 
         # ── Transition to PROCESSING ──────────────────────────
@@ -71,12 +78,6 @@ class DataLoaderService:
         run.raw_record_count = parsed.raw_record_count
         run.skipped_team_count = parsed.skipped_record_count
         await db.commit()
-
-        if not metric_records:
-            run.status = "COMPLETED"
-            run.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
-            await db.commit()
-            return result
 
         # ── Resolve teams by fifa_code ────────────────────────
         teams_result = await db.execute(select(Team))
@@ -116,10 +117,7 @@ class DataLoaderService:
                 result.skipped_team_count += 1
                 result.errors.append(f"加载第 {record.source_index} 条记录失败：{exc}")
 
-        # ── Commit updates ────────────────────────────────────
-        await db.commit()
-
-        # ── Finalise the run ──────────────────────────────────
+        # Finalise in the same transaction as team updates.
         if result.updated_team_count == 0 and result.skipped_team_count > 0:
             run.status = "FAILED"
             run.error_message = (

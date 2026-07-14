@@ -33,12 +33,12 @@
       "category": "TEAM_STRENGTH",
       "provider": "eloratings.net",
       "source_url": "https://www.eloratings.net/",
-      "local_path": null,
-      "acquisition_method": "PUBLIC_WEB_REFERENCE",
-      "verification_status": "PENDING_NETWORK_REFRESH",
+      "local_path": "snapshots/world_football_elo_20260714.json",
+      "acquisition_method": "CURATED_LOCAL_BASELINE",
+      "verification_status": "VERIFIED_LOCAL",
       "used_by": ["ELO 方法参考", "球队实力基线"],
       "is_official": false,
-      "notice": "独立 ELO 数据源，并非 FIFA 官方排名。"
+      "notice": "项目人工维护的可复现 ELO 起始基线，并非网络原始响应，也不能证明已经从 eloratings.net 自动采集。"
     },
     {
       "id": "fifa_mens_ranking",

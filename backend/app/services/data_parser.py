@@ -117,7 +117,7 @@ class OpenFootballWorldCupParser:
 
 
 class TeamEloJsonParser:
-    """Parse a future trusted ELO JSON source into normalized team metrics."""
+    """Parse a team ELO JSON snapshot into normalized team metrics."""
 
     source_name = "world_football_elo"
 

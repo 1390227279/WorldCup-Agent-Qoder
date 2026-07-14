@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -65,7 +67,7 @@ async def process_collected_data(run_id: int, db: AsyncSession = Depends(get_db)
     except DataParseError as exc:
         run.status = "FAILED"
         run.error_message = f"解析失败：{exc}"[:2000]
-        run.completed_at = None
+        run.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
         await db.commit()
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except DataLoadError as exc:

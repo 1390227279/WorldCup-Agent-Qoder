@@ -4,15 +4,13 @@ import hashlib
 import json
 from datetime import date
 
-import httpx
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.models import Base, DataCollectionRun, Team
-from app.services.data_fetcher import DataFetcherService
-from app.services.data_loader import DataLoaderService, LoadResult
-from app.services.data_parser import DataParserService, ParsedSnapshot, TeamMetricRecord, TeamEloJsonParser
+from app.services.data_loader import DataLoaderService
+from app.services.data_parser import DataParserService, ParsedSnapshot, TeamEloJsonParser
 
 
 @pytest.fixture
@@ -165,42 +163,30 @@ async def test_elo_out_of_range_is_skipped_by_parser_not_loader(tmp_path, sessio
 
 
 @pytest.mark.asyncio
-async def test_full_fetch_parse_load_pipeline(tmp_path, session):
-    await _seed_teams(session)
-
-    snapshot_root = tmp_path / "resources" / "snapshots"
-    snapshot_root.mkdir(parents=True)
-
-    payload = json.dumps({"teams": [
+async def test_loader_rejects_metric_records_from_a_different_source(session):
+    run = DataCollectionRun(source_name="openfootball", status="FETCHED")
+    session.add(run)
+    await session.commit()
+    parsed = TeamEloJsonParser().parse(json.dumps({"teams": [
         {"fifa_code": "ARG", "elo": 2140.0},
-        {"fifa_code": "FRA", "elo": 2100.0},
-    ]}).encode()
+    ]}).encode())
 
-    transport = httpx.MockTransport(lambda request: httpx.Response(
-        200, content=payload, headers={"content-type": "application/json"},
-        request=request,
-    ))
-    async with httpx.AsyncClient(transport=transport) as client:
-        run = await DataFetcherService(client=client, snapshot_root=snapshot_root).fetch(
-            "openfootball_worldcup_2022", session
-        )
+    with pytest.raises(ValueError, match="来源"):
+        await DataLoaderService().load_metrics(run, parsed, session)
 
-    assert run.status == "FETCHED"
-    assert run.snapshot_path is not None
-    assert run.updated_team_count == 0
-
-    parsed = DataParserService(app_root=tmp_path)
-    parsed.parsers[run.source_name] = TeamEloJsonParser()
-    snapshot = parsed.parse_run(run)
-    assert isinstance(snapshot.records[0], TeamMetricRecord)
-
-    result = await DataLoaderService().load_metrics(run, snapshot, session)
-    assert result.updated_team_count == 2
     await session.refresh(run)
-    assert run.status == "COMPLETED"
+    assert run.status == "FETCHED"
 
-    teams_result = await session.execute(select(Team))
-    teams_by_code = {t.fifa_code: t.elo_rating for t in teams_result.scalars().all()}
-    assert teams_by_code["ARG"] == 2140.0
-    assert teams_by_code["FRA"] == 2100.0
-    assert teams_by_code["BRA"] == 2075.0
+
+@pytest.mark.asyncio
+async def test_loader_rejects_snapshot_without_team_metrics(session):
+    run = DataCollectionRun(source_name="openfootball", status="FETCHED")
+    session.add(run)
+    await session.commit()
+    parsed = ParsedSnapshot(source_name="openfootball", raw_record_count=1)
+
+    with pytest.raises(ValueError, match="不包含可加载"):
+        await DataLoaderService().load_metrics(run, parsed, session)
+
+    await session.refresh(run)
+    assert run.status == "FETCHED"

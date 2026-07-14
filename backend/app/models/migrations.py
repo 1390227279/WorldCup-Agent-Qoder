@@ -16,6 +16,7 @@ from app.models.tournament import (
 
 EVENT_METADATA_MIGRATION_VERSION = "20260713_event_metadata_v1"
 TOURNAMENT_DOMAIN_MIGRATION_VERSION = "20260714_tournament_domain_v1"
+DATA_COLLECTION_LEDGER_MIGRATION_VERSION = "20260714_data_collection_ledger_v1"
 
 def _migrate_event_metadata(connection) -> None:
     tables = set(inspect(connection).get_table_names())
@@ -130,10 +131,43 @@ def _migrate_tournament_domain(connection) -> None:
     ), {"code": DEFAULT_TOURNAMENT_CODE})
 
 
+def _migrate_data_collection_ledger(connection) -> None:
+    connection.execute(text(
+        "CREATE TABLE IF NOT EXISTS data_collection_runs ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "source_name VARCHAR(100) NOT NULL, "
+        "source_url VARCHAR(1000), "
+        "started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+        "completed_at DATETIME, "
+        "status VARCHAR(20) NOT NULL DEFAULT 'FETCHING', "
+        "http_status INTEGER, "
+        "snapshot_path VARCHAR(1000), "
+        "snapshot_bytes INTEGER, "
+        "sha256_hash VARCHAR(64), "
+        "raw_record_count INTEGER NOT NULL DEFAULT 0, "
+        "updated_team_count INTEGER NOT NULL DEFAULT 0, "
+        "skipped_team_count INTEGER NOT NULL DEFAULT 0, "
+        "error_message TEXT)"
+    ))
+    connection.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_data_collection_runs_source_started "
+        "ON data_collection_runs (source_name, started_at)"
+    ))
+    connection.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_data_collection_runs_status "
+        "ON data_collection_runs (status)"
+    ))
+    connection.execute(text(
+        "CREATE INDEX IF NOT EXISTS ix_data_collection_runs_sha256 "
+        "ON data_collection_runs (sha256_hash)"
+    ))
+
+
 Migration = tuple[str, Callable]
 MIGRATIONS: tuple[Migration, ...] = (
     (EVENT_METADATA_MIGRATION_VERSION, _migrate_event_metadata),
     (TOURNAMENT_DOMAIN_MIGRATION_VERSION, _migrate_tournament_domain),
+    (DATA_COLLECTION_LEDGER_MIGRATION_VERSION, _migrate_data_collection_ledger),
 )
 MIGRATION_VERSIONS = tuple(version for version, _ in MIGRATIONS)
 

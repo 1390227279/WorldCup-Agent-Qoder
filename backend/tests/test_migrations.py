@@ -114,3 +114,37 @@ def test_new_database_does_not_create_legacy_team_tournament_columns():
         }
     assert "group_name" not in columns
     assert "pot" not in columns
+
+
+def test_data_collection_ledger_migration_is_additive_and_idempotent(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'lineage.db'}")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE teams (id INTEGER PRIMARY KEY, name VARCHAR(100))"))
+        connection.execute(text("INSERT INTO teams (id, name) VALUES (1, 'Argentina')"))
+
+        run_migrations(connection)
+        run_migrations(connection)
+
+        tables = set(inspect(connection).get_table_names())
+        assert "data_collection_runs" in tables
+        columns = {column["name"] for column in inspect(connection).get_columns("data_collection_runs")}
+        assert {
+            "id", "source_name", "started_at", "status", "http_status",
+            "snapshot_path", "sha256_hash", "updated_team_count", "error_message",
+            "source_url", "completed_at", "snapshot_bytes", "raw_record_count",
+            "skipped_team_count",
+        } <= columns
+        connection.execute(text(
+            "INSERT INTO data_collection_runs "
+            "(source_name, status, http_status, snapshot_path, snapshot_bytes, "
+            "sha256_hash, raw_record_count, updated_team_count, skipped_team_count) "
+            "VALUES ('world_football_elo', 'COMPLETED', 200, 'snapshots/raw.json', "
+            "1024, :sha256, 48, 46, 2)"
+        ), {"sha256": "a" * 64})
+        run = connection.execute(text(
+            "SELECT source_name, status, updated_team_count, skipped_team_count "
+            "FROM data_collection_runs"
+        )).one()
+        assert run == ("world_football_elo", "COMPLETED", 46, 2)
+        assert connection.execute(text("SELECT name FROM teams WHERE id = 1")).scalar_one() == "Argentina"
+        assert _applied_versions(connection) == set(MIGRATION_VERSIONS)

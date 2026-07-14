@@ -15,7 +15,7 @@ FETCH_SOURCES: dict[str, FetchSource] = {
     "openfootball_worldcup_2022": FetchSource(
         id="openfootball_worldcup_2022",
         name="openfootball",
-        url="https://raw.githubusercontent.com/openfootball/worldcup/master/2022--qatar/cup.json",
+        url="https://raw.githubusercontent.com/openfootball/worldcup.json/master/2022/worldcup.json",
         expected_content_types=("application/json", "text/plain"),
     ),
 }

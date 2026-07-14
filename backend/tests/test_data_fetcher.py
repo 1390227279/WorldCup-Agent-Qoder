@@ -45,6 +45,7 @@ async def test_fetcher_persists_raw_response_before_marking_run_fetched(tmp_path
     assert run.sha256_hash == hashlib.sha256(raw).hexdigest()
     assert run.snapshot_path.endswith(snapshots[0].name)
     assert run.updated_team_count == 0
+    assert run.source_url == "https://raw.githubusercontent.com/openfootball/worldcup.json/master/2022/worldcup.json"
 
 
 @pytest.mark.asyncio

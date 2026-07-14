@@ -59,6 +59,30 @@ def test_openfootball_parser_normalizes_matches_and_reports_bad_rows(tmp_path):
     )]
 
 
+def test_openfootball_parser_supports_worldcup_json_rounds_structure(tmp_path):
+    payload = json.dumps({
+        "name": "World Cup 2022",
+        "rounds": [{
+            "name": "Final",
+            "matches": [{
+                "date": "2022-12-18",
+                "team1": {"name": "Argentina", "code": "ARG"},
+                "team2": {"name": "France", "code": "FRA"},
+                "score": {"ft": [3, 3], "p": [4, 2]},
+            }],
+        }],
+    }).encode()
+    run, _ = _fetched_run(tmp_path, payload)
+
+    result = DataParserService(app_root=tmp_path).parse_run(run)
+
+    assert result.raw_record_count == 1
+    assert result.skipped_record_count == 0
+    assert result.records[0].stage == "Final"
+    assert result.records[0].home_fifa_code == "ARG"
+    assert result.records[0].away_fifa_code == "FRA"
+
+
 def test_parser_rejects_tampered_snapshot(tmp_path):
     run, snapshot = _fetched_run(tmp_path, b'{"matches": []}')
     snapshot.write_bytes(b'{"matches": ["tampered"]}')

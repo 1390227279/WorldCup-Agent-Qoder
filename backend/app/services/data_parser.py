@@ -63,13 +63,14 @@ class OpenFootballWorldCupParser:
             payload = json.loads(content.decode("utf-8-sig"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise DataParseError(f"openfootball 快照不是有效 UTF-8 JSON：{exc}") from exc
-        if not isinstance(payload, dict) or not isinstance(payload.get("matches"), list):
-            raise DataParseError("openfootball 快照缺少 matches 数组")
-
-        matches = payload["matches"]
+        if not isinstance(payload, dict):
+            raise DataParseError("openfootball 快照顶层必须是对象")
+        matches = self._extract_matches(payload)
+        if not matches:
+            raise DataParseError("openfootball 快照未找到 matches 或 rounds[].matches")
         result = ParsedSnapshot(source_name=self.source_name, raw_record_count=len(matches))
         tournament = str(payload.get("name") or "World Cup").strip()
-        for index, item in enumerate(matches, start=1):
+        for index, (item, parent_round) in enumerate(matches, start=1):
             try:
                 if not isinstance(item, dict):
                     raise ValueError("记录不是对象")
@@ -77,7 +78,7 @@ class OpenFootballWorldCupParser:
                 away_code = self._team_code(item.get("team2") or item.get("away"))
                 home_goals, away_goals = self._full_time_score(item.get("score"))
                 match_date = date.fromisoformat(str(item.get("date", ""))[:10])
-                stage = str(item.get("round") or item.get("group") or "UNKNOWN").strip()
+                stage = str(item.get("round") or item.get("group") or parent_round or "UNKNOWN").strip()
                 result.records.append(HistoricalMatchRecord(
                     source_index=index,
                     match_date=match_date,
@@ -92,6 +93,21 @@ class OpenFootballWorldCupParser:
                 result.skipped_record_count += 1
                 result.errors.append(f"第 {index} 条比赛记录：{exc}")
         return result
+
+    @staticmethod
+    def _extract_matches(payload: dict) -> list[tuple[dict, str | None]]:
+        direct = payload.get("matches")
+        if isinstance(direct, list):
+            return [(item, None) for item in direct]
+        extracted: list[tuple[dict, str | None]] = []
+        rounds = payload.get("rounds")
+        if isinstance(rounds, list):
+            for round_item in rounds:
+                if not isinstance(round_item, dict) or not isinstance(round_item.get("matches"), list):
+                    continue
+                round_name = str(round_item.get("name") or "").strip() or None
+                extracted.extend((match, round_name) for match in round_item["matches"])
+        return extracted
 
     @staticmethod
     def _team_code(value) -> str:

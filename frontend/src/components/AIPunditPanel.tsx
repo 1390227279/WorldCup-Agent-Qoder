@@ -39,7 +39,7 @@ function MathSummary({ match, math }: { match: Match; math?: MatchMathContext })
       : "暂无比分");
 
   return (
-    <div className="rounded-xl border border-[var(--color-primary)]/40 bg-[var(--color-bg)] p-4">
+    <div className="rounded-lg border border-[var(--color-primary)]/40 bg-[var(--color-bg)] p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-[var(--color-primary)]">数学模型结果</span>
         <span className="text-[10px] text-[var(--color-text-muted)]">
@@ -91,7 +91,7 @@ function MathSummary({ match, math }: { match: Match; math?: MatchMathContext })
             </div>
           )}
           {math.narrative_events.length > 0 && (
-            <div className="mt-3 rounded-lg border border-dashed border-white/20 bg-transparent p-2 text-xs">
+            <div className="mt-3 rounded-lg border border-dashed border-[var(--color-border)] bg-transparent p-2 text-xs">
               <p className="mb-1 font-semibold">本场 AI 解读背景</p>
               {math.narrative_events.map((event) => (
                 <p key={event.event_id} className="text-[var(--color-text-muted)]">
@@ -167,7 +167,7 @@ export default function AIPunditPanel({ match, analysis, isLoading = false }: Pr
           transition={{ repeat: Infinity, duration: 1.5 }}
           className="rounded-lg bg-[var(--color-bg)] p-4 text-center text-sm text-[var(--color-text-muted)]"
         >
-          🤖 正在基于上述数学结果生成解释…
+          正在基于上述数学结果生成中文解释…
         </motion.div>
       )}
 

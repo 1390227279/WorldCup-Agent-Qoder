@@ -15,6 +15,19 @@ function Metric({ label, value, note }: { label: string; value: string; note?: s
   );
 }
 
+function modelLabel(version?: string): string {
+  return version ? "ELO-泊松确定性模型" : "—";
+}
+
+function rulesLabel(version?: string): string {
+  return version ? "固定情景淘汰赛规则" : "—";
+}
+
+function dataVersionLabel(version?: string): string {
+  if (!version) return "—";
+  return version.includes("scenario") ? "用户维护的情景赛事数据" : "版本化赛事数据";
+}
+
 export default function HomePage() {
   const { data: simulation, isLoading, error, refetch } = useQuery<SimulationResult>({
     queryKey: simulationQueryKeys.baseline,
@@ -69,9 +82,9 @@ export default function HomePage() {
                 </div>
                 <Metric label="模拟次数" value={simulation?.model.iterations.toLocaleString() ?? "—"} note="完整赛事迭代" />
                 <Metric label="主种子" value={simulation?.model.seed.toString() ?? "—"} note="普通刷新保持不变" />
-                <Metric label="模型版本" value={simulation?.model.version ?? "—"} />
-                <Metric label="赛事规则" value={simulation?.tournament.rules_version ?? "—"} />
-                <Metric label="数据版本" value={simulation?.tournament.data_version ?? "—"} />
+                <Metric label="模型类型" value={modelLabel(simulation?.model.version)} />
+                <Metric label="赛事规则" value={rulesLabel(simulation?.tournament.rules_version)} />
+                <Metric label="数据来源" value={dataVersionLabel(simulation?.tournament.data_version)} />
               </section>
 
               <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">

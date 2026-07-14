@@ -54,6 +54,38 @@ textarea {
   font: inherit;
 }
 
+button:not(:disabled),
+select:not(:disabled) {
+  cursor: pointer;
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+}
+
+input,
+select,
+textarea {
+  color: var(--color-text);
+  transition: border-color var(--motion-fast), background-color var(--motion-fast);
+}
+
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: var(--color-text-muted);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--color-accent);
+  outline: none;
+}
+
 button,
 a {
   -webkit-tap-highlight-color: transparent;

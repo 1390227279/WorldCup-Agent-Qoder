@@ -177,7 +177,7 @@ export default function BracketSandboxPage() {
               <span key={item.teamId} className="border-l border-[var(--color-border)] pl-4">
                 {item.team?.name_cn || item.team?.name || `球队 ${item.teamId}`}
                 <b className="ml-1 font-mono text-white">{(item.probability * 100).toFixed(1)}%</b>
-                <i className={`ml-1 not-italic ${item.deltaPoints > 0 ? "text-[var(--color-secondary)]" : item.deltaPoints < 0 ? "text-[var(--color-error)]" : "text-[var(--color-text-muted)]"}`}>{item.deltaPoints > 0 ? "+" : ""}{item.deltaPoints.toFixed(1)}pp</i>
+                <i className={`ml-1 not-italic ${item.deltaPoints > 0 ? "text-[var(--color-secondary)]" : item.deltaPoints < 0 ? "text-[var(--color-error)]" : "text-[var(--color-text-muted)]"}`}>{item.deltaPoints > 0 ? "+" : ""}{item.deltaPoints.toFixed(1)} 个百分点</i>
               </span>
             ))}
           </div>

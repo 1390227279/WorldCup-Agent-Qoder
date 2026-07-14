@@ -23,12 +23,12 @@ function ImpactModeBadge({ event }: { event: Event }) {
   return (
     <span className="group relative inline-flex shrink-0" tabIndex={0} aria-label={tooltip}>
       <span className={isMath
-        ? "rounded-full border border-[var(--color-gold)] bg-[var(--color-gold)]/20 px-2 py-0.5 text-[10px] font-semibold text-[var(--color-gold)] shadow-[0_0_12px_rgba(245,158,11,0.25)]"
-        : "rounded-full border border-dashed border-white/30 bg-transparent px-2 py-0.5 text-[10px] text-[var(--color-text-muted)]"
+        ? "rounded-full border border-[var(--color-gold)] bg-[var(--color-gold)]/20 px-2 py-0.5 text-[10px] font-semibold text-[var(--color-gold)] shadow-[0_0_12px_rgba(230,183,16,0.25)]"
+        : "rounded-full border border-dashed border-[var(--color-border)] bg-transparent px-2 py-0.5 text-[10px] text-[var(--color-text-muted)]"
       }>
         {isMath ? "∑ 数学影响" : "✦ AI 解读"}
       </span>
-      <span className="pointer-events-none absolute right-0 top-full z-20 mt-2 w-56 rounded-lg bg-black/90 px-3 py-2 text-left text-[11px] leading-relaxed text-white opacity-0 shadow-xl transition-opacity group-hover:opacity-100 group-focus:opacity-100">
+      <span className="pointer-events-none absolute right-0 top-full z-20 mt-2 w-56 rounded-lg border border-[var(--color-border)] bg-[#0d1114]/95 px-3 py-2 text-left text-[11px] leading-relaxed text-white opacity-0 shadow-[var(--shadow-panel)] transition-opacity group-hover:opacity-100 group-focus:opacity-100">
         {tooltip}
       </span>
     </span>
@@ -137,8 +137,8 @@ export default function ScenarioSlider({ selectedEventIds, onChange, disabled = 
               key={event.id}
               title={event.impact_mode === "MATH" ? "影响数学胜率模型" : "仅作为 AI 解读背景，不影响数学胜率"}
               className={`max-w-48 truncate rounded-full border px-2.5 py-1 text-xs ${event.impact_mode === "MATH"
-                ? "border-[var(--color-gold)] bg-[var(--color-gold)]/20 text-[var(--color-gold)] shadow-[0_0_10px_rgba(245,158,11,0.2)]"
-                : "border-dashed border-white/30 bg-transparent text-[var(--color-text-muted)]"
+                ? "border-[var(--color-gold)] bg-[var(--color-gold)]/20 text-[var(--color-gold)] shadow-[0_0_10px_rgba(230,183,16,0.2)]"
+                : "border-dashed border-[var(--color-border)] bg-transparent text-[var(--color-text-muted)]"
               }`}
             >
               {event.team_name ?? teamById.get(event.team_id)?.name_cn}：{event.title}
@@ -172,7 +172,7 @@ export default function ScenarioSlider({ selectedEventIds, onChange, disabled = 
         <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
           <button aria-label="关闭事件选择" onClick={() => setOpen(false)} className="absolute inset-0 bg-[#0d1114]/80" />
           <aside className="relative flex h-full w-full max-w-[520px] flex-col border-l border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-panel)]">
-            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+            <div className="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4">
               <div>
                 <h2 className="text-lg font-bold">选择赛事事件</h2>
                 <p className="text-xs text-[var(--color-text-muted)]">已选择 {draftIds.length} 项，应用后重新模拟</p>
@@ -180,7 +180,7 @@ export default function ScenarioSlider({ selectedEventIds, onChange, disabled = 
               <button onClick={() => setOpen(false)} className="text-sm text-[var(--color-text-muted)]">关闭</button>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 border-b border-white/10 p-4">
+            <div className="grid grid-cols-2 gap-2 border-b border-[var(--color-border)] p-4">
               <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索球队或事件" className="col-span-2 rounded-lg bg-[var(--color-bg)] px-3 py-2 text-sm" />
               <select value={teamFilter} onChange={(event) => setTeamFilter(event.target.value)} className="rounded-lg bg-[var(--color-bg)] px-3 py-2 text-sm">
                 <option value="">全部球队</option>
@@ -216,11 +216,11 @@ export default function ScenarioSlider({ selectedEventIds, onChange, disabled = 
                 return (
                   <button key={event.id} onClick={() => toggleDraft(event.id)} className={`mb-2 w-full rounded-lg border p-3 text-left ${selected
                     ? event.impact_mode === "MATH"
-                      ? "border-[var(--color-gold)] bg-[var(--color-gold)]/10 shadow-[0_0_16px_rgba(245,158,11,0.12)]"
-                      : "border-dashed border-white/40 bg-white/5"
+                      ? "border-[var(--color-gold)] bg-[var(--color-gold)]/10 shadow-[0_0_16px_rgba(230,183,16,0.12)]"
+                      : "border-dashed border-[var(--color-text-muted)] bg-[var(--color-surface-raised)]"
                     : event.impact_mode === "MATH"
                       ? "border-[var(--color-gold)]/25 bg-[var(--color-bg)]"
-                      : "border-dashed border-white/15 bg-[var(--color-bg)]"
+                      : "border-dashed border-[var(--color-border)] bg-[var(--color-bg)]"
                   }`}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -237,7 +237,7 @@ export default function ScenarioSlider({ selectedEventIds, onChange, disabled = 
               })}
             </div>
 
-            <div className="border-t border-white/10 p-4">
+            <div className="border-t border-[var(--color-border)] p-4">
               {applyError && (
                 <p className="mb-3 text-sm text-[var(--color-accent)]">{applyError}</p>
               )}
@@ -250,7 +250,7 @@ export default function ScenarioSlider({ selectedEventIds, onChange, disabled = 
                 </div>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setOpen(false)} className="flex-1 rounded-lg border border-white/15 py-2 text-sm">取消</button>
+                <button onClick={() => setOpen(false)} className="flex-1 rounded-md border border-[var(--color-border)] py-2 text-sm transition-colors hover:border-[var(--color-text-muted)]">取消</button>
                 <button
                   disabled={applying || disabled}
                   onClick={() => void applySelection(draftIds, true)}

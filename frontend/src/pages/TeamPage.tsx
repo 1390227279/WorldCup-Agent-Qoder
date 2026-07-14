@@ -12,6 +12,18 @@ function severityLabel(severity: string): string {
   return "一般";
 }
 
+function participationLabel(status?: string): string {
+  if (status === "SCENARIO") return "情景参赛阵容";
+  if (status === "QUALIFIED") return "已确认参赛";
+  return status ? "赛事参赛球队" : "未关联赛事";
+}
+
+function tournamentStatusLabel(status?: string): string {
+  if (status === "SCENARIO") return "非官方情景数据";
+  if (status === "OFFICIAL") return "官方赛事数据";
+  return status ? "赛事数据" : "未知";
+}
+
 function EventCard({ event }: { event: Event }) {
   const mode = resolveImpactMode(event);
   const attack = event.impact?.attack_lambda_delta ?? event.impact?.attack;
@@ -80,7 +92,7 @@ export default function TeamPage() {
             <h1 className="dashboard-title">{team.name_cn}</h1>
             <p className="mt-1 text-sm text-[var(--color-text-muted)]">{team.name}</p>
           </div>
-          <span className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs text-[var(--color-text-muted)]">{team.tournament?.qualification_status ?? "未关联赛事"}</span>
+          <span className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs text-[var(--color-text-muted)]">{participationLabel(team.tournament?.qualification_status)}</span>
         </div>
       </header>
 
@@ -98,7 +110,7 @@ export default function TeamPage() {
             <div className="flex justify-between gap-4 py-3"><dt className="text-[var(--color-text-muted)]">赛事</dt><dd className="text-right">{team.tournament?.name_cn ?? "未关联"}</dd></div>
             <div className="flex justify-between gap-4 py-3"><dt className="text-[var(--color-text-muted)]">小组</dt><dd>{team.tournament?.group_name ?? "待定"}</dd></div>
             <div className="flex justify-between gap-4 py-3"><dt className="text-[var(--color-text-muted)]">档位</dt><dd>{team.tournament?.pot ? `第 ${team.tournament.pot} 档` : "待定"}</dd></div>
-            <div className="flex justify-between gap-4 py-3"><dt className="text-[var(--color-text-muted)]">数据状态</dt><dd>{team.tournament?.status ?? "未知"}</dd></div>
+            <div className="flex justify-between gap-4 py-3"><dt className="text-[var(--color-text-muted)]">数据状态</dt><dd>{tournamentStatusLabel(team.tournament?.status)}</dd></div>
             <div className="flex justify-between gap-4 py-3"><dt className="text-[var(--color-text-muted)]">历史成绩</dt><dd className="text-right">{team.stats?.best_result || (team.stats?.world_cup_titles ? `${team.stats.world_cup_titles} 次夺冠` : "尚未夺冠")}</dd></div>
           </dl>
         </aside>

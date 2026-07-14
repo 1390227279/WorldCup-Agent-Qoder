@@ -11,12 +11,12 @@ const STAGE_LABELS: Record<string, string> = {
   FINAL: "决赛",
 };
 
-const NODE_W = 176;
-const NODE_H = 40;
-const COL_GAP = 42;
-const ROW_GAP = 3;
-const HEADER_H = 38;
-const FOOTER_H = 24;
+const NODE_W = 170;
+const NODE_H = 38;
+const COL_GAP = 32;
+const ROW_GAP = 1;
+const HEADER_H = 34;
+const FOOTER_H = 14;
 const COL_X = STAGES.map((_, index) => index * (NODE_W + COL_GAP));
 
 function stride(stageIndex: number): number {
@@ -166,7 +166,7 @@ export default function BracketTree({ stages, eventInfluenced, selectedMatchKey,
       <div className="hidden lg:block" style={{ height: "clamp(560px, calc(100vh - 285px), 720px)" }}>
         <svg width="100%" height="100%" viewBox={`0 0 ${svgWidth} ${TOTAL_H}`} preserveAspectRatio="xMidYMid meet" className="block overflow-visible">
           {STAGES.map((stage, index) => (
-            <text key={stage} x={COL_X[index] + NODE_W / 2} y={18} textAnchor="middle" fill="var(--color-text-muted)" fontSize={12} fontWeight={600} letterSpacing="0.05em">
+            <text key={stage} x={COL_X[index] + NODE_W / 2} y={18} textAnchor="middle" fill="var(--color-text-muted)" fontSize={13} fontWeight={600} letterSpacing="0.05em">
               {STAGE_LABELS[stage]}
             </text>
           ))}
@@ -219,10 +219,10 @@ export default function BracketTree({ stages, eventInfluenced, selectedMatchKey,
               >
                 <rect x={x} y={y} width={NODE_W} height={NODE_H} rx={8} fill={selected ? "var(--color-surface-raised)" : "var(--color-surface)"} stroke={selected || highlighted ? "var(--color-primary)" : "var(--color-border)"} strokeWidth={selected ? 2.4 : highlighted ? 1.8 : 1.4} style={selected || highlighted ? { filter: "drop-shadow(0 0 5px rgba(230,183,16,0.28))" } : undefined} />
                 <line x1={x + 8} y1={y + NODE_H / 2} x2={x + NODE_W - 8} y2={y + NODE_H / 2} stroke="var(--color-border-muted)" />
-                <text x={x + 9} y={y + 14} fill={homeWinner ? "var(--color-primary)" : "var(--color-text-muted)"} fontSize={10} fontWeight={homeWinner ? 600 : 400}>{compactTeamName(match, "home")}</text>
-                <text x={x + NODE_W - 9} y={y + 14} textAnchor="end" fill="white" fontFamily="monospace" fontSize={10} fontWeight={600}>{match.home_score ?? "—"}</text>
-                <text x={x + 9} y={y + 34} fill={awayWinner ? "var(--color-primary)" : "var(--color-text-muted)"} fontSize={10} fontWeight={awayWinner ? 600 : 400}>{compactTeamName(match, "away")}</text>
-                <text x={x + NODE_W - 9} y={y + 34} textAnchor="end" fill="white" fontFamily="monospace" fontSize={10} fontWeight={600}>{match.away_score ?? "—"}</text>
+                <text x={x + 9} y={y + 13.5} fill={homeWinner ? "var(--color-primary)" : "var(--color-text-muted)"} fontSize={12} fontWeight={homeWinner ? 600 : 400}>{compactTeamName(match, "home")}</text>
+                <text x={x + NODE_W - 9} y={y + 13.5} textAnchor="end" fill="white" fontFamily="monospace" fontSize={12} fontWeight={600}>{match.home_score ?? "—"}</text>
+                <text x={x + 9} y={y + 33} fill={awayWinner ? "var(--color-primary)" : "var(--color-text-muted)"} fontSize={12} fontWeight={awayWinner ? 600 : 400}>{compactTeamName(match, "away")}</text>
+                <text x={x + NODE_W - 9} y={y + 33} textAnchor="end" fill="white" fontFamily="monospace" fontSize={12} fontWeight={600}>{match.away_score ?? "—"}</text>
               </motion.g>
             );
           })}

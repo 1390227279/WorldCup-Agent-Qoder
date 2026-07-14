@@ -300,41 +300,41 @@ export default function AdminEventsPage() {
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <label className="text-xs text-[var(--color-text-muted)]">球队
-              <select value={form.team_id} onChange={(event) => setForm({ ...form, team_id: Number(event.target.value) })} className="mt-1 w-full rounded-lg border border-white/10 bg-[var(--color-bg)] px-3 py-2 text-sm">
+              <select value={form.team_id} onChange={(event) => setForm({ ...form, team_id: Number(event.target.value) })} className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm">
                 <option value={0}>选择球队…</option>
                 {teams?.map((team: Team) => <option key={team.id} value={team.id}>{team.name_cn}</option>)}
               </select>
             </label>
             <label className="text-xs text-[var(--color-text-muted)]">事件类型
-              <select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })} className="mt-1 w-full rounded-lg border border-white/10 bg-[var(--color-bg)] px-3 py-2 text-sm">
+              <select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })} className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm">
                 {TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             </label>
             <label className="text-xs text-[var(--color-text-muted)]">严重程度
-              <select value={form.severity} onChange={(event) => setForm({ ...form, severity: event.target.value })} className="mt-1 w-full rounded-lg border border-white/10 bg-[var(--color-bg)] px-3 py-2 text-sm">
+              <select value={form.severity} onChange={(event) => setForm({ ...form, severity: event.target.value })} className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm">
                 {SEVERITY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             </label>
             <label className="text-xs text-[var(--color-text-muted)]">来源类型
-              <select value={form.source_type} onChange={(event) => setForm({ ...form, source_type: event.target.value })} className="mt-1 w-full rounded-lg border border-white/10 bg-[var(--color-bg)] px-3 py-2 text-sm">
+              <select value={form.source_type} onChange={(event) => setForm({ ...form, source_type: event.target.value })} className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm">
                 {SOURCE_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             </label>
             <label className="text-xs text-[var(--color-text-muted)] md:col-span-2">标题
-              <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} className="mt-1 w-full rounded-lg border border-white/10 bg-[var(--color-bg)] px-3 py-2 text-sm" />
+              <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} className="mt-1 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm" />
             </label>
             <label className="text-xs text-[var(--color-text-muted)] md:col-span-2">描述
-              <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} rows={2} className="mt-1 w-full resize-none rounded-lg border border-white/10 bg-[var(--color-bg)] px-3 py-2 text-sm" />
+              <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} rows={2} className="mt-1 w-full resize-none rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm" />
             </label>
 
             <div className="md:col-span-2">
               <p className="mb-2 text-xs text-[var(--color-text-muted)]">事件作用</p>
               <div className="grid gap-3 md:grid-cols-2">
-                <button type="button" onClick={() => setForm({ ...form, impact_mode: "MATH" })} className={`rounded-xl border p-4 text-left ${form.impact_mode === "MATH" ? "border-[var(--color-gold)] bg-[var(--color-gold)]/15 shadow-[0_0_18px_rgba(245,158,11,0.18)]" : "border-[var(--color-gold)]/20 bg-transparent"}`}>
+                <button type="button" onClick={() => setForm({ ...form, impact_mode: "MATH" })} className={`rounded-lg border p-4 text-left ${form.impact_mode === "MATH" ? "border-[var(--color-gold)] bg-[var(--color-gold)]/15 shadow-[0_0_18px_rgba(230,183,16,0.18)]" : "border-[var(--color-gold)]/20 bg-transparent"}`}>
                   <p className="font-semibold text-[var(--color-gold)]">∑ 影响数学模型</p>
                   <p className="mt-1 text-xs text-[var(--color-text-muted)]">修正进球期望，并改变比赛胜率与晋级概率。</p>
                 </button>
-                <button type="button" onClick={() => setForm({ ...form, impact_mode: "NARRATIVE" })} className={`rounded-xl border border-dashed p-4 text-left ${form.impact_mode === "NARRATIVE" ? "border-white/50 bg-white/5" : "border-white/20 bg-transparent"}`}>
+                <button type="button" onClick={() => setForm({ ...form, impact_mode: "NARRATIVE" })} className={`rounded-lg border border-dashed p-4 text-left ${form.impact_mode === "NARRATIVE" ? "border-[var(--color-text-muted)] bg-[var(--color-surface-raised)]" : "border-[var(--color-border)] bg-transparent"}`}>
                   <p className="font-semibold">✦ 仅作为 AI 解读背景</p>
                   <p className="mt-1 text-xs text-[var(--color-text-muted)]">保留士气、经历和战术语境，不影响数学胜率模型。</p>
                 </button>
@@ -411,7 +411,7 @@ export default function AdminEventsPage() {
                     <div className="rounded-lg bg-[var(--color-bg)] p-2">本队失球期望：{concede == null ? "未设置" : `${concede >= 0 ? "+" : ""}${(concede * 100).toFixed(1)}%`}</div>
                   </div>
                 ) : (
-                  <p className="mt-3 rounded-lg border border-dashed border-white/20 px-3 py-2 text-xs text-[var(--color-text-muted)]">此事件仅作为相关比赛的 AI 解读背景，不修改比分、胜率或晋级概率。</p>
+                  <p className="mt-3 rounded-lg border border-dashed border-[var(--color-border)] px-3 py-2 text-xs text-[var(--color-text-muted)]">此事件仅作为相关比赛的 AI 解读背景，不修改比分、胜率或晋级概率。</p>
                 )}
                 {event.needs_impact_migration && (
                   <p className="mt-2 rounded-lg bg-orange-500/10 px-3 py-2 text-xs text-orange-300">此事件仍使用旧影响字段（{event.legacy_impact_fields?.join("、")}），点击“修改”并保存即可迁移为标准 λ 字段。</p>

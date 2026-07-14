@@ -135,7 +135,7 @@ function ReasoningChain({ chain }: { chain: ReasoningStep[] }) {
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
-      <span className="mb-3 text-4xl opacity-40">🤖</span>
+      <span className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--color-border)] text-sm text-[var(--color-text-muted)]">AI</span>
       <p className="text-sm text-[var(--color-text-muted)]">暂无 AI 战术解读</p>
       <p className="mt-1 text-xs text-[var(--color-text-muted)] opacity-60">
         选择一场比赛后，先展示数学结果，再生成解释报告
@@ -152,12 +152,12 @@ interface Props {
 
 export default function AIPunditPanel({ match, analysis, isLoading = false }: Props) {
   if (!match) {
-    return <div className="rounded-xl bg-[var(--color-surface)] p-4"><EmptyState /></div>;
+    return <EmptyState />;
   }
 
   const agent = analysis?.agent;
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-xl bg-[var(--color-surface)] p-5">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
       <MathSummary match={match} math={analysis?.math} />
 
       <SectionTitle>AI 战术解读</SectionTitle>

@@ -126,8 +126,8 @@ export default function ScenarioSlider({ selectedEventIds, onChange, disabled = 
 
   return (
     <div className="mb-4">
-      <div className="flex flex-wrap items-center gap-2 rounded-xl bg-[var(--color-surface)] px-3 py-2">
-        <span className="text-sm font-semibold">事件影响</span>
+      <div className="dashboard-glass flex flex-wrap items-center gap-2 rounded-lg px-3 py-2.5 shadow-[var(--shadow-sm)]">
+        <span className="dashboard-label uppercase text-white">情景事件</span>
         <span className="text-xs text-[var(--color-text-muted)]">
           已选择 {selectedEventIds.length} 项 · {selectedMathCount} 项影响数学模型 · {selectedNarrativeCount} 项用于 AI 解读
         </span>
@@ -159,7 +159,7 @@ export default function ScenarioSlider({ selectedEventIds, onChange, disabled = 
             清空
           </button>
         )}
-        <button onClick={showDrawer} disabled={loading || disabled || applying} className="rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs text-white disabled:opacity-50">
+        <button onClick={showDrawer} disabled={loading || disabled || applying} className="rounded-md bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-[#1c1d21] transition-colors hover:bg-[var(--color-primary-hover)] disabled:opacity-50">
           {loading ? "加载中…" : "选择事件"}
         </button>
       </div>
@@ -170,8 +170,8 @@ export default function ScenarioSlider({ selectedEventIds, onChange, disabled = 
 
       {open && (
         <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
-          <button aria-label="关闭事件选择" onClick={() => setOpen(false)} className="absolute inset-0 bg-black/60" />
-          <aside className="relative flex h-full w-full max-w-[520px] flex-col bg-[var(--color-surface)] shadow-2xl">
+          <button aria-label="关闭事件选择" onClick={() => setOpen(false)} className="absolute inset-0 bg-[#0d1114]/80" />
+          <aside className="relative flex h-full w-full max-w-[520px] flex-col border-l border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-panel)]">
             <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
               <div>
                 <h2 className="text-lg font-bold">选择赛事事件</h2>
@@ -254,7 +254,7 @@ export default function ScenarioSlider({ selectedEventIds, onChange, disabled = 
                 <button
                   disabled={applying || disabled}
                   onClick={() => void applySelection(draftIds, true)}
-                  className="flex-1 rounded-lg bg-[var(--color-primary)] py-2 text-sm text-white disabled:opacity-50"
+                  className="flex-1 rounded-md bg-[var(--color-primary)] py-2 text-sm font-semibold text-[#1c1d21] disabled:opacity-50"
                 >
                   {applying ? "模拟中…" : "应用并重新模拟"}
                 </button>

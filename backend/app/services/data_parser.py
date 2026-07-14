@@ -57,6 +57,19 @@ class OpenFootballWorldCupParser:
     """Parse openfootball match JSON as history; it does not manufacture ELO values."""
 
     source_name = "openfootball"
+    TEAM_NAME_TO_FIFA_CODE = {
+        "argentina": "ARG", "australia": "AUS", "belgium": "BEL",
+        "brazil": "BRA", "cameroon": "CMR", "canada": "CAN",
+        "costa rica": "CRC", "croatia": "CRO", "denmark": "DEN",
+        "ecuador": "ECU", "england": "ENG", "france": "FRA",
+        "germany": "GER", "ghana": "GHA", "iran": "IRN",
+        "japan": "JPN", "mexico": "MEX", "morocco": "MAR",
+        "netherlands": "NED", "poland": "POL", "portugal": "POR",
+        "qatar": "QAT", "saudi arabia": "KSA", "senegal": "SEN",
+        "serbia": "SRB", "south korea": "KOR", "spain": "ESP",
+        "switzerland": "SUI", "tunisia": "TUN", "uruguay": "URU",
+        "usa": "USA", "united states": "USA", "wales": "WAL",
+    }
 
     def parse(self, content: bytes) -> ParsedSnapshot:
         try:
@@ -113,7 +126,9 @@ class OpenFootballWorldCupParser:
     def _team_code(value) -> str:
         if isinstance(value, dict):
             value = value.get("code") or value.get("fifa_code") or value.get("name")
-        code = str(value or "").strip().upper()
+        raw = str(value or "").strip()
+        mapped = OpenFootballWorldCupParser.TEAM_NAME_TO_FIFA_CODE.get(raw.casefold())
+        code = mapped or raw.upper()
         if len(code) != 3 or not code.isalpha():
             raise ValueError(f"无效 FIFA code：{value!r}")
         return code

@@ -24,6 +24,10 @@ class DataPipelineService:
     async def process(self, run: DataCollectionRun, db: AsyncSession) -> PipelineResult:
         run_id = run.id
         try:
+            if run.status == "FAILED" and run.snapshot_path and run.sha256_hash:
+                run.status = "FETCHED"
+                run.error_message = None
+                await db.commit()
             parsed = self.parser.parse_run(run)
             if run.source_name == "openfootball":
                 loaded = await HistoricalMatchLoaderService().load(run, parsed, db)

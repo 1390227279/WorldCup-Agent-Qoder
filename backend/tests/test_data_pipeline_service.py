@@ -32,3 +32,10 @@ async def test_pipeline_marks_unknown_source_failed(tmp_path,session):
     run=await make_run(session,tmp_path,"unknown",{"teams":[]})
     with pytest.raises(ValueError): await DataPipelineService(DataParserService(app_root=tmp_path)).process(run,session)
     await session.refresh(run); assert run.status=="FAILED"
+
+@pytest.mark.asyncio
+async def test_pipeline_can_retry_failed_processing_when_snapshot_exists(tmp_path,session):
+    run=await make_run(session,tmp_path,"openfootball",{"matches":[{"date":"2022-12-18","team1":"Argentina","team2":"France","score":{"ft":[3,3]}}]})
+    run.status="FAILED"; run.error_message="旧解析器无法识别球队名称"; await session.commit()
+    result=await DataPipelineService(DataParserService(app_root=tmp_path)).process(run,session)
+    assert result.inserted_record_count==1 and result.status=="COMPLETED"

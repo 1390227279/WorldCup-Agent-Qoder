@@ -83,6 +83,19 @@ def test_openfootball_parser_supports_worldcup_json_rounds_structure(tmp_path):
     assert result.records[0].away_fifa_code == "FRA"
 
 
+def test_openfootball_parser_maps_full_team_names_to_fifa_codes(tmp_path):
+    payload = json.dumps({"matches": [
+        {"date": "2022-11-20", "team1": "Qatar", "team2": "Ecuador", "score": {"ft": [0, 2]}},
+        {"date": "2022-12-02", "team1": "South Korea", "team2": "Portugal", "score": {"ft": [2, 1]}},
+    ]}).encode()
+    run, _ = _fetched_run(tmp_path, payload)
+    result = DataParserService(app_root=tmp_path).parse_run(run)
+    assert [(item.home_fifa_code, item.away_fifa_code) for item in result.records] == [
+        ("QAT", "ECU"), ("KOR", "POR"),
+    ]
+    assert result.skipped_record_count == 0
+
+
 def test_parser_rejects_tampered_snapshot(tmp_path):
     run, snapshot = _fetched_run(tmp_path, b'{"matches": []}')
     snapshot.write_bytes(b'{"matches": ["tampered"]}')

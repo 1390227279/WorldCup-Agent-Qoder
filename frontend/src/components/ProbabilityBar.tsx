@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { Link } from "react-router-dom";
 import type { Team, SimulationResult } from "../types";
 
 interface Props {
@@ -17,13 +18,7 @@ function displayTeamName(team: Team): string {
 export default function ProbabilityBar({ simulation }: Props) {
   const summary = simulation?.summary;
   if (!summary) {
-    return (
-      <div className="bg-[var(--color-surface)] rounded-xl p-8 text-center">
-        <p className="text-[var(--color-text-muted)]">
-          正在完成蒙特卡洛模拟...
-        </p>
-      </div>
-    );
+    return <div className="py-14 text-center text-[var(--color-text-muted)]">正在完成蒙特卡洛模拟...</div>;
   }
 
   const knownTeams = new Map<number, Team>();
@@ -33,77 +28,42 @@ export default function ProbabilityBar({ simulation }: Props) {
   for (const entry of summary.top3 ?? []) {
     if (entry?.team) knownTeams.set(entry.team.id, entry.team);
   }
-  if (summary.probability_leader?.team) {
-    knownTeams.set(summary.probability_leader.team.id, summary.probability_leader.team);
-  }
+  if (summary.probability_leader?.team) knownTeams.set(summary.probability_leader.team.id, summary.probability_leader.team);
 
-  const rows: ProbabilityRow[] = Object.entries(
-    summary.champion_probs_by_team_id ?? {},
-  )
-    .map(([teamId, probability]) => ({
-      team: knownTeams.get(Number(teamId)),
-      probability,
-    }))
-    .filter((row): row is ProbabilityRow => (
-      row.team != null && Number.isFinite(row.probability)
-    ))
+  const rows: ProbabilityRow[] = Object.entries(summary.champion_probs_by_team_id ?? {})
+    .map(([teamId, probability]) => ({ team: knownTeams.get(Number(teamId)), probability }))
+    .filter((row): row is ProbabilityRow => row.team != null && Number.isFinite(row.probability))
     .sort((a, b) => b.probability - a.probability || a.team.id - b.team.id);
-
   const leader = summary.probability_leader;
-  const leaderRow = leader?.team && Number.isFinite(leader.probability)
-    ? { team: leader.team, probability: leader.probability }
-    : undefined;
-  const sorted = leaderRow
-    ? [leaderRow, ...rows.filter((row) => row.team.id !== leaderRow.team.id)].slice(0, 10)
+  const sorted = leader?.team
+    ? [{ team: leader.team, probability: leader.probability }, ...rows.filter((row) => row.team.id !== leader.team.id)].slice(0, 10)
     : rows.slice(0, 10);
+  const maxProbability = Math.max(...sorted.map((row) => row.probability), 0.01);
 
-  if (sorted.length === 0) {
-    return (
-      <div className="bg-[var(--color-surface)] rounded-xl p-8 text-center">
-        <p className="text-[var(--color-text-muted)]">暂无可用的夺冠概率数据</p>
-      </div>
-    );
-  }
+  if (sorted.length === 0) return <div className="py-14 text-center text-[var(--color-text-muted)]">暂无可用的夺冠概率数据</div>;
 
   return (
-    <div className="space-y-3">
-      {sorted.map(({ team, probability }, i) => {
-        const displayName = displayTeamName(team);
-        const normalizedProbability = Math.min(Math.max(probability, 0), 1);
-        const pct = (normalizedProbability * 100).toFixed(1);
-
+    <div className="divide-y divide-[var(--color-border-muted)]">
+      {sorted.map(({ team, probability }, index) => {
+        const pct = Math.min(Math.max(probability, 0), 1) * 100;
+        const relativeWidth = Math.max((probability / maxProbability) * 100, 2);
         return (
-          <motion.div
-            key={team.id}
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: i * 0.05 }}
-            className="flex items-center gap-4"
-          >
-            <span className="w-8 text-right text-sm text-[var(--color-text-muted)]">
-              {i + 1}
-            </span>
-            <span className="w-20 text-sm font-medium text-right">
-              {displayName}
-            </span>
-            <div className="flex-1 bg-[var(--color-bg)] rounded-full h-6 overflow-hidden">
+          <Link key={team.id} to={`/team/${team.id}`} className="group grid grid-cols-[28px_minmax(80px,130px)_minmax(100px,1fr)_58px] items-center gap-3 py-3 transition-colors hover:bg-[var(--color-surface-raised)]/70 sm:grid-cols-[32px_150px_minmax(120px,1fr)_68px]">
+            <span className={index === 0 ? "font-mono text-sm text-[var(--color-primary)]" : "font-mono text-sm text-[var(--color-text-muted)]"}>{String(index + 1).padStart(2, "0")}</span>
+            <div className="min-w-0">
+              <p className={index === 0 ? "truncate font-semibold text-[var(--color-primary)]" : "truncate font-medium text-white"}>{displayTeamName(team)}</p>
+              <p className="text-[11px] text-[var(--color-text-muted)]">{team.fifa_code}</p>
+            </div>
+            <div className="h-2 overflow-hidden rounded-sm bg-[var(--color-border-muted)]">
               <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: `${Math.max(Number(pct), 1)}%` }}
-                transition={{ delay: i * 0.05 + 0.3, duration: 0.6 }}
-                className="h-full rounded-full"
-                style={{
-                  background:
-                    i === 0
-                      ? "linear-gradient(90deg, #f5c518, #e94560)"
-                      : i < 3
-                        ? "linear-gradient(90deg, #1a56db, #6366f1)"
-                        : "linear-gradient(90deg, #374151, #4b5563)",
-                }}
+                animate={{ width: `${relativeWidth}%` }}
+                transition={{ delay: index * 0.03, duration: 0.45 }}
+                className={index === 0 ? "h-full bg-[var(--color-primary)] shadow-[var(--shadow-glow)]" : index < 3 ? "h-full bg-[var(--color-secondary)]" : "h-full bg-[var(--color-border)] group-hover:bg-[var(--color-text-muted)]"}
               />
             </div>
-            <span className="w-16 text-sm font-mono text-right">{pct}%</span>
-          </motion.div>
+            <span className={index === 0 ? "text-right font-mono font-semibold text-[var(--color-primary)]" : "text-right font-mono text-white"}>{pct.toFixed(1)}%</span>
+          </Link>
         );
       })}
     </div>

@@ -48,10 +48,7 @@ export default function SidebarNav() {
   return (
     <>
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-16 flex-col items-center border-r border-[var(--color-border)] bg-[var(--color-surface)] py-4 lg:flex">
-        <NavLink to="/" aria-label="返回预测总览" className="mb-7 flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--color-primary)]/40 bg-[var(--color-primary)]/10 text-xs font-bold tracking-wider text-[var(--color-primary)] shadow-[var(--shadow-glow)]">
-          WC
-        </NavLink>
-        <nav aria-label="主导航" className="flex flex-1 flex-col items-center gap-3">
+        <nav aria-label="主导航" className="flex flex-1 flex-col items-center gap-3 pt-1">
           {NAV_ITEMS.map((item) => (
             <NavLink key={item.to} to={item.to} end={item.to === "/"} aria-label={item.label} className={navClassName}>
               {item.icon}
@@ -65,9 +62,8 @@ export default function SidebarNav() {
       </aside>
 
       <nav aria-label="移动端主导航" className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)]/95 px-3 backdrop-blur-md lg:hidden">
-        <NavLink to="/" className="flex items-center gap-2 text-sm font-semibold">
-          <span className="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--color-primary)]/40 bg-[var(--color-primary)]/10 text-[10px] font-bold text-[var(--color-primary)]">WC</span>
-          <span>赛事推演中心</span>
+        <NavLink to="/" className="text-sm font-semibold text-[var(--color-primary)]">
+          世界杯推演中心
         </NavLink>
         <div className="flex items-center gap-1">
           {NAV_ITEMS.map((item) => (

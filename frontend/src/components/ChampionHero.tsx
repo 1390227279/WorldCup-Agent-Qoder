@@ -14,100 +14,84 @@ function formatProbability(probability: number): string {
   return `${(Math.min(Math.max(probability, 0), 1) * 100).toFixed(1)}%`;
 }
 
+function TrophyMark() {
+  return (
+    <svg viewBox="0 0 48 48" aria-hidden="true" className="h-9 w-9 fill-none stroke-current" strokeWidth="2">
+      <path d="M16 7h16v7c0 8-3.6 14-8 14s-8-6-8-14zM19 28h10M24 28v8M17 41h14" />
+      <path d="M16 11H9v3c0 6 3 10 9 10M32 11h7v3c0 6-3 10-9 10" />
+    </svg>
+  );
+}
+
 export default function ChampionHero({ simulation }: Props) {
   if (!simulation) {
     return (
-      <div className="bg-[var(--color-surface)] rounded-2xl p-12 text-center">
-        <p className="text-4xl mb-4">⚽</p>
-        <p className="text-xl text-[var(--color-text-muted)]">
-          正在计算基础实力基线...
-        </p>
-        <p className="text-sm text-[var(--color-text-muted)] mt-2">
-          完成全部赛事模拟后，此区域将展示夺冠概率最高的球队
-        </p>
+      <div className="dashboard-card flex min-h-72 items-center justify-center p-8 text-center">
+        <div>
+          <div className="mx-auto mb-4 h-8 w-8 animate-pulse rounded-md border border-[var(--color-primary)] bg-[var(--color-primary)]/10" />
+          <p className="font-semibold">正在建立基础实力基线</p>
+          <p className="mt-1 text-sm text-[var(--color-text-muted)]">完成全部赛事模拟后展示概率第一球队</p>
+        </div>
       </div>
     );
   }
 
   const leader = simulation.summary?.probability_leader;
   if (!leader?.team) {
-    return (
-      <div className="bg-[var(--color-surface)] rounded-2xl p-12 text-center">
-        <p className="text-xl text-[var(--color-text-muted)]">
-          暂无可用的基线概率数据
-        </p>
-      </div>
-    );
+    return <div className="dashboard-card p-8 text-center text-[var(--color-text-muted)]">暂无可用的基线概率数据</div>;
   }
 
   const top3 = [
     leader,
-    ...(simulation.summary.top3 ?? []).filter(
-      (entry) => entry.team.id !== leader.team.id,
-    ),
+    ...(simulation.summary.top3 ?? []).filter((entry) => entry.team.id !== leader.team.id),
   ].slice(0, 3);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
+    <motion.section
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6 }}
-      className="bg-[var(--color-surface)] rounded-2xl p-8 md:p-12 text-center relative overflow-hidden"
+      transition={{ duration: 0.3 }}
+      className="dashboard-card relative overflow-hidden border-[var(--color-primary)]/25"
     >
-      {/* Gold glow background */}
-      <div
-        className="absolute inset-0 opacity-10"
-        style={{
-          background:
-            "radial-gradient(circle at center, var(--color-gold) 0%, transparent 70%)",
-        }}
-      />
-
-      <div className="relative z-10">
-        <p className="text-sm text-[var(--color-text-muted)] uppercase tracking-widest mb-4">
-          基础实力基线（不含事件） · 蒙特卡洛 {simulation.model.iterations.toLocaleString()} 次完整赛事模拟
-        </p>
-
-        <motion.div
-          initial={{ scale: 0.8 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.3, type: "spring", stiffness: 200 }}
-        >
-          <p className="text-6xl mb-3">🏆</p>
-          <h2 className="text-5xl font-bold text-[var(--color-gold)] mb-2">
-            {teamName(leader)}
-          </h2>
-          <div className="inline-flex items-center gap-2 bg-[var(--color-gold)]/10 rounded-full px-6 py-2">
-            <span className="text-3xl font-bold text-[var(--color-gold)]">
-              {formatProbability(leader.probability)}
-            </span>
-            <span className="text-sm text-[var(--color-text-muted)]">
-              夺冠概率
-            </span>
-          </div>
-        </motion.div>
-
-        {/* Top 3 summary */}
-        <div className="mt-8 flex justify-center gap-8 flex-wrap">
-          {top3.map((entry, i) => {
-            const colors = [
-              "text-[var(--color-gold)]",
-              "text-[var(--color-silver)]",
-              "text-[var(--color-bronze)]",
-            ];
-            return (
-              <div key={entry.team.id} className="text-center">
-                <p className={`text-2xl font-bold ${colors[i]}`}>
-                  {formatProbability(entry.probability)}
-                </p>
-                <p className="text-sm text-[var(--color-text-muted)]">
-                  {teamName(entry)}
-                </p>
+      <div className="absolute inset-y-0 left-0 w-1 bg-[var(--color-primary)]" />
+      <div className="grid min-h-72 gap-6 p-6 md:grid-cols-[minmax(0,1fr)_240px] md:p-8">
+        <div className="flex min-w-0 flex-col justify-between">
+          <div>
+            <div className="mb-6 flex items-center gap-3">
+              <span className="flex h-12 w-12 items-center justify-center rounded-lg border border-[var(--color-primary)]/40 bg-[var(--color-primary)]/10 text-[var(--color-primary)] shadow-[var(--shadow-glow)]">
+                <TrophyMark />
+              </span>
+              <div>
+                <p className="dashboard-label uppercase">基础实力概率第一</p>
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]">不含伤病、士气和战术事件</p>
               </div>
-            );
-          })}
+            </div>
+            <p className="truncate text-4xl font-semibold tracking-tight text-white md:text-5xl">{teamName(leader)}</p>
+            <p className="mt-2 font-mono text-sm text-[var(--color-text-muted)]">{leader.team.fifa_code} · ELO {leader.team.elo_rating?.toFixed(0) ?? "—"}</p>
+          </div>
+
+          <div className="mt-8 flex flex-wrap items-end gap-x-4 gap-y-2">
+            <span className="font-mono text-5xl font-semibold leading-none text-[var(--color-primary)] md:text-6xl">{formatProbability(leader.probability)}</span>
+            <span className="pb-1 text-sm text-[var(--color-text-muted)]">模拟夺冠概率</span>
+          </div>
+        </div>
+
+        <div className="border-t border-[var(--color-border)] pt-5 md:border-l md:border-t-0 md:pl-6 md:pt-0">
+          <p className="dashboard-label mb-4 uppercase">前三名基线</p>
+          <div className="space-y-3">
+            {top3.map((entry, index) => (
+              <div key={entry.team.id} className="grid grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--color-border-muted)] pb-3 last:border-0">
+                <span className={index === 0 ? "font-mono text-[var(--color-primary)]" : "font-mono text-[var(--color-text-muted)]"}>0{index + 1}</span>
+                <div className="min-w-0">
+                  <p className="truncate font-semibold">{teamName(entry)}</p>
+                  <p className="text-xs text-[var(--color-text-muted)]">{entry.team.fifa_code}</p>
+                </div>
+                <span className={index === 0 ? "font-mono font-semibold text-[var(--color-primary)]" : "font-mono text-white"}>{formatProbability(entry.probability)}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
-    </motion.div>
+    </motion.section>
   );
 }

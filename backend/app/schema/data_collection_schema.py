@@ -13,6 +13,7 @@ class DataCollectionRunResponse(BaseModel):
     id: int
     source_name: str
     source_url: str | None
+    acquisition_method: str
     started_at: datetime
     completed_at: datetime | None
     status: CollectionRunStatus

@@ -20,6 +20,7 @@ DATA_COLLECTION_LEDGER_MIGRATION_VERSION = "20260714_data_collection_ledger_v1"
 HISTORICAL_MATCHES_MIGRATION_VERSION = "20260715_historical_matches_v1"
 COLLECTION_COUNTERS_MIGRATION_VERSION = "20260715_collection_counters_v1"
 COLLECTION_CHANGES_MIGRATION_VERSION = "20260715_collection_changes_v1"
+ACQUISITION_METHOD_MIGRATION_VERSION = "20260715_acquisition_method_v1"
 
 def _migrate_event_metadata(connection) -> None:
     tables = set(inspect(connection).get_table_names())
@@ -201,6 +202,11 @@ def _migrate_collection_changes(connection) -> None:
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_data_collection_changes_run ON data_collection_changes (run_id)"))
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_data_collection_changes_team ON data_collection_changes (team_id)"))
 
+def _migrate_acquisition_method(connection) -> None:
+    columns = {column["name"] for column in inspect(connection).get_columns("data_collection_runs")}
+    if "acquisition_method" not in columns:
+        connection.execute(text("ALTER TABLE data_collection_runs ADD COLUMN acquisition_method VARCHAR(50) NOT NULL DEFAULT 'NETWORK_GET'"))
+
 
 Migration = tuple[str, Callable]
 MIGRATIONS: tuple[Migration, ...] = (
@@ -210,6 +216,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     (HISTORICAL_MATCHES_MIGRATION_VERSION, _migrate_historical_matches),
     (COLLECTION_COUNTERS_MIGRATION_VERSION, _migrate_collection_counters),
     (COLLECTION_CHANGES_MIGRATION_VERSION, _migrate_collection_changes),
+    (ACQUISITION_METHOD_MIGRATION_VERSION, _migrate_acquisition_method),
 )
 MIGRATION_VERSIONS = tuple(version for version, _ in MIGRATIONS)
 

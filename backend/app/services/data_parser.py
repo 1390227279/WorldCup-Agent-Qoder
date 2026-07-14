@@ -176,6 +176,7 @@ class DataParserService:
         self.parsers: dict[str, SnapshotParser] = {
             "openfootball": OpenFootballWorldCupParser(),
             "world_football_elo": TeamEloJsonParser(),
+            "curated_elo_baseline": TeamEloJsonParser(),
         }
 
     def parse_run(self, run: DataCollectionRun) -> ParsedSnapshot:
@@ -199,4 +200,7 @@ class DataParserService:
         digest = hashlib.sha256(content).hexdigest()
         if digest != run.sha256_hash:
             raise DataParseError("快照 SHA-256 与采集账本不一致")
-        return parser.parse(content)
+        parsed = parser.parse(content)
+        if run.source_name == "curated_elo_baseline":
+            parsed.source_name = run.source_name
+        return parsed

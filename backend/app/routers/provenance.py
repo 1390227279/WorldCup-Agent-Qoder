@@ -10,6 +10,7 @@ from app.services.data_fetcher import DataFetchError, DataFetcherService
 from app.services.data_pipeline import DataPipelineService
 from app.services.data_provenance import get_data_provenance
 from app.services.data_source_registry import FETCH_SOURCES
+from app.services.local_baseline import LocalBaselineService
 
 router = APIRouter()
 
@@ -28,6 +29,10 @@ async def list_collection_runs(limit: int = Query(20, ge=1, le=100), db: AsyncSe
 async def collect_source(source_id: str, db: AsyncSession = Depends(get_db)):
     try: return await DataFetcherService().fetch(source_id, db)
     except DataFetchError as exc: raise HTTPException(status_code=404 if exc.run_id is None else 502, detail=str(exc)) from exc
+
+@router.post("/register-local-elo", response_model=DataCollectionRunResponse)
+async def register_local_elo(db: AsyncSession = Depends(get_db)):
+    return await LocalBaselineService().register(db)
 
 @router.post("/process/{run_id}", response_model=DataCollectionProcessResponse)
 async def process_collected_data(run_id: int, db: AsyncSession = Depends(get_db)):

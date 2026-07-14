@@ -44,6 +44,7 @@ class DataFetcherService:
         run = DataCollectionRun(
             source_name=source.name,
             source_url=source.url,
+            acquisition_method="NETWORK_GET",
             status="FETCHING",
             started_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )

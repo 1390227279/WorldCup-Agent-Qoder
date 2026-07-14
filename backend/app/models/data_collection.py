@@ -19,6 +19,7 @@ class DataCollectionRun(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     source_name: Mapped[str] = mapped_column(String(100), nullable=False)
     source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    acquisition_method: Mapped[str] = mapped_column(String(50), nullable=False, default="NETWORK_GET")
     started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="FETCHING")
@@ -38,6 +39,7 @@ class DataCollectionRun(Base):
             "id": self.id,
             "source_name": self.source_name,
             "source_url": self.source_url,
+            "acquisition_method": self.acquisition_method,
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
             "status": self.status,

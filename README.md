@@ -106,7 +106,7 @@ npm run build
 npm run lint
 ```
 
-当前回归基线为后端 98 项测试通过，前端构建和静态检查通过。
+当前回归基线为后端 135 项测试通过，前端构建和静态检查通过。
 
 ## SQLite 升级策略
 
@@ -119,3 +119,25 @@ npm run lint
 - 如果未来需要物理清理旧列，应使用带备份、行数核对、外键检查和回滚能力的独立离线工具。
 
 详细设计见 [架构说明](docs/architecture.md)。
+
+## 数据采集与血缘
+
+```text
+受控来源 → HTTP GET → 原始快照 → SHA-256 → 来源专属解析器
+       → 历史比赛/ELO 加载器 → 逐条变更审计 → Agent 数据库工具
+```
+
+- openfootball 写入 `historical_matches`，按比赛指纹去重。
+- 本地 ELO 以 `CURATED_LOCAL_BASELINE` 登记，不伪装为网络请求。
+- `data_collection_runs` 保存成功与失败的采集小票。
+- `data_collection_changes` 保存 ELO 旧值/新值和比赛插入、重复、跳过明细。
+- Agent 的近期状态与历史交锋只读取已采集数据库。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/v1/data-sources` | 来源配置与本地快照证据 |
+| POST | `/api/v1/data-sources/collect/{source_id}` | 网络采集并保存原始快照 |
+| POST | `/api/v1/data-sources/register-local-elo` | 登记人工 ELO 基线 |
+| POST | `/api/v1/data-sources/process/{run_id}` | 按来源解析并加载 |
+| GET | `/api/v1/data-sources/collection-runs` | 采集运行账本 |
+| GET | `/api/v1/data-sources/collection-runs/{run_id}/changes` | 逐条变更明细 |

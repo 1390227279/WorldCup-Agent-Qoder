@@ -202,3 +202,39 @@ npm run lint
 ```
 
 关键回归覆盖基线稳定性、事件控制变量、合法晋级链、代表路径选择、缓存失效、AI 熔断、旧数据库升级和新数据库结构。
+
+## 10. 数据采集与血缘架构
+
+网络响应先原样写入 `resources/snapshots`，重新从磁盘读取并计算 SHA-256 后才允许解析。调用方只能选择受控 `source_id`，不能提交任意 URL。
+
+```text
+DataFetcherService → data_collection_runs + raw snapshot
+        ↓
+DataParserService
+  ├─ OpenFootballWorldCupParser → HistoricalMatchRecord
+  └─ TeamEloJsonParser          → TeamMetricRecord
+        ↓
+DataPipelineService
+  ├─ HistoricalMatchLoaderService → historical_matches
+  └─ DataLoaderService             → teams.elo_rating
+        ↓
+data_collection_changes + simulation cache invalidation
+```
+
+`historical_matches.match_fingerprint` 对日期、赛事、阶段、双方 FIFA code 和比分计算 SHA-256，并建立唯一约束，重复处理不会制造重复比赛。
+
+人工 ELO 基线的 `acquisition_method` 为 `CURATED_LOCAL_BASELINE`、`http_status` 为空，只证明本地文件可复现。真实请求使用 `NETWORK_GET`，成功或失败都会保留运行记录。
+
+Agent 的 `get_recent_form` 和 `get_h2h_record` 查询 `historical_matches`，输出来源运行 ID 与哈希前缀。数据库为空时明确返回暂无数据，不使用内置样例静默替代。
+
+### 演示顺序
+
+1. 触发 openfootball 采集并查看 HTTP 状态、大小和 SHA-256。
+2. 对 `FETCHED` 运行导入历史比赛。
+3. 展开运行查看 `INSERTED/DUPLICATE/SKIPPED`。
+4. 登记本地 ELO 基线并查看球队旧值与新值。
+5. 打开 AI 分析，验证工具输出包含运行 ID 与哈希证据。
+
+### 外部边界
+
+`eloratings.net/World.tsv` 当前返回反爬 HTML而非 TSV，因此未注册为可用抓取源。系统不会把该响应伪装成 ELO 数据，在获得许可清晰、结构稳定的接口前继续使用明确标注的人工基线。

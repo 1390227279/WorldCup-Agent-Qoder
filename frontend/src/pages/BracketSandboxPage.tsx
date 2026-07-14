@@ -195,7 +195,7 @@ export default function BracketSandboxPage() {
         </section>
       )}
 
-      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="min-w-0">
         <section className="dashboard-card relative min-w-0 overflow-hidden p-3 sm:p-4">
           {isLoading && <div className="flex min-h-[520px] items-center justify-center text-sm text-[var(--color-text-muted)]">正在加载淘汰赛数据…</div>}
           {error && (
@@ -215,16 +215,13 @@ export default function BracketSandboxPage() {
           )}
         </section>
 
-        <aside className="dashboard-card sticky top-4 hidden h-[calc(100vh-32px)] min-h-[620px] overflow-hidden xl:block">
-          <MatchAnalysisPanel match={selectedMatch} analysis={selectedAnalysis} isLoading={isPending} error={predictError instanceof Error ? predictError : null} onClose={selectedMatch ? closeMatch : undefined} />
-        </aside>
       </div>
 
       <AnimatePresence>
         {selectedMatch && (
-          <motion.div className="fixed inset-0 z-50 flex justify-end xl:hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <motion.div className="fixed inset-0 z-50 flex justify-end" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <button type="button" aria-label="关闭 AI 战情面板" onClick={closeMatch} className="absolute inset-0 bg-[#0d1114]/80" />
-            <motion.aside initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ duration: 0.3, ease: "easeOut" }} className="relative h-full w-full max-w-[440px] overflow-hidden border-l border-[var(--color-border)] shadow-[var(--shadow-panel)]">
+            <motion.aside initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ duration: 0.3, ease: "easeOut" }} className="relative h-full w-full max-w-[480px] overflow-hidden border-l border-[var(--color-border)] shadow-[var(--shadow-panel)]">
               <MatchAnalysisPanel match={selectedMatch} analysis={selectedAnalysis} isLoading={isPending} error={predictError instanceof Error ? predictError : null} onClose={closeMatch} />
             </motion.aside>
           </motion.div>

@@ -13,7 +13,7 @@ const STAGE_LABELS: Record<string, string> = {
 
 const NODE_W = 170;
 const NODE_H = 38;
-const COL_GAP = 32;
+const COL_GAP = 110;
 const ROW_GAP = 1;
 const HEADER_H = 34;
 const FOOTER_H = 14;
@@ -163,7 +163,7 @@ export default function BracketTree({ stages, eventInfluenced, selectedMatchKey,
         </div>
       </div>
 
-      <div className="hidden lg:block" style={{ height: "clamp(560px, calc(100vh - 285px), 720px)" }}>
+      <div className="hidden xl:block" style={{ height: "clamp(660px, calc(100vh - 225px), 900px)" }}>
         <svg width="100%" height="100%" viewBox={`0 0 ${svgWidth} ${TOTAL_H}`} preserveAspectRatio="xMidYMid meet" className="block overflow-visible">
           {STAGES.map((stage, index) => (
             <text key={stage} x={COL_X[index] + NODE_W / 2} y={18} textAnchor="middle" fill="var(--color-text-muted)" fontSize={13} fontWeight={600} letterSpacing="0.05em">
@@ -229,7 +229,7 @@ export default function BracketTree({ stages, eventInfluenced, selectedMatchKey,
         </svg>
       </div>
 
-      <div className="lg:hidden">
+      <div className="xl:hidden">
         <div className="mb-4 flex gap-1 overflow-x-auto border-b border-[var(--color-border)] pb-2">
           {STAGES.map((stage, index) => (
             <button key={stage} type="button" onClick={() => setStageIndex(index)} className={`shrink-0 rounded-md border px-3 py-1.5 text-xs transition-colors ${stageIndex === index ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10 text-[var(--color-primary)]" : "border-transparent text-[var(--color-text-muted)] hover:border-[var(--color-border)]"}`}>

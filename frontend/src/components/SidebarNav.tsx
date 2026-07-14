@@ -38,27 +38,39 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 function navClassName({ isActive }: { isActive: boolean }) {
-  return `group relative flex h-11 w-11 items-center justify-center rounded-lg border transition-all duration-150 ${isActive
+  return `group relative flex h-11 w-full items-center gap-3 rounded-lg border px-3 transition-all duration-150 ${isActive
     ? "border-[var(--color-accent)]/40 bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
     : "border-transparent text-[var(--color-text-muted)] hover:border-[var(--color-border)] hover:bg-[var(--color-surface-raised)] hover:text-white"
+  }`;
+}
+
+function mobileNavClassName({ isActive }: { isActive: boolean }) {
+  return `flex h-10 w-10 items-center justify-center rounded-lg border transition-all duration-150 ${isActive
+    ? "border-[var(--color-accent)]/40 bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
+    : "border-transparent text-[var(--color-text-muted)] hover:border-[var(--color-border)] hover:text-white"
   }`;
 }
 
 export default function SidebarNav() {
   return (
     <>
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-16 flex-col items-center border-r border-[var(--color-border)] bg-[var(--color-surface)] py-4 lg:flex">
-        <nav aria-label="主导航" className="flex flex-1 flex-col items-center gap-3 pt-1">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-44 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-4 lg:flex">
+        <NavLink to="/" className="mb-6 border-b border-[var(--color-border)] px-2 pb-5">
+          <p className="text-sm font-semibold text-[var(--color-primary)]">世界杯预测</p>
+          <p className="mt-1 text-[10px] tracking-wider text-[var(--color-text-muted)]">赛事推演指挥中心</p>
+        </NavLink>
+        <nav aria-label="主导航" className="flex flex-1 flex-col gap-2">
           {NAV_ITEMS.map((item) => (
             <NavLink key={item.to} to={item.to} end={item.to === "/"} aria-label={item.label} className={navClassName}>
               {item.icon}
-              <span className="pointer-events-none absolute left-full ml-3 whitespace-nowrap rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2.5 py-1.5 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                {item.label}
-              </span>
+              <span className="text-sm font-medium">{item.label}</span>
             </NavLink>
           ))}
         </nav>
-        <div className="h-2 w-2 rounded-full bg-[var(--color-secondary)] shadow-[0_0_8px_rgba(74,222,128,0.55)]" title="系统在线" />
+        <div className="flex items-center gap-2 border-t border-[var(--color-border)] px-2 pt-4 text-xs text-[var(--color-text-muted)]">
+          <span className="h-2 w-2 rounded-full bg-[var(--color-secondary)] shadow-[0_0_8px_rgba(74,222,128,0.55)]" />
+          系统在线
+        </div>
       </aside>
 
       <nav aria-label="移动端主导航" className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)]/95 px-3 backdrop-blur-md lg:hidden">
@@ -67,7 +79,7 @@ export default function SidebarNav() {
         </NavLink>
         <div className="flex items-center gap-1">
           {NAV_ITEMS.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.to === "/"} aria-label={item.label} className={navClassName}>
+            <NavLink key={item.to} to={item.to} end={item.to === "/"} aria-label={item.label} className={mobileNavClassName}>
               {item.icon}
             </NavLink>
           ))}

@@ -1,10 +1,32 @@
+# 前端依赖与构建产物
 node_modules/
 dist/
+
+# Python 缓存、虚拟环境与测试缓存
 *.pyc
 __pycache__/
+.pytest_cache/
+.venv/
+venv/
+
+# 本地环境变量和备份；公开模板继续纳入版本控制
 .env
+.env.*
+!.env.example
+
+# 本地数据库、日志与系统文件
 *.db
+*.sqlite
+*.sqlite3
+*.log
 .DS_Store
+
+# 本地部署传输包与参赛提交材料
+*.bundle
+参赛提交材料/
+提交材料*.zip
+
+# 个人设计文档与截图素材
 self/
 shots/
 shootphotos/

@@ -738,6 +738,10 @@ class TestBracketEndpoint:
         assert body["math"]["final_score"] == f'{final["home_score"]}-{final["away_score"]}'
         assert len(body["math"]["group_qualifiers"]) == 32
         assert len(body["math"]["knockout_path"]) == 31
+        assert body["math"]["tournament_code"] == "world-cup-2026"
+        assert body["math"]["tournament_name"] == simulation_body["tournament"]["name_cn"]
+        assert body["math"]["tournament_year"] == 2026
+        assert captured["tournament_year"] == 2026
         assert captured["champion"] == body["math"]["champion"]
         assert body["agent"]["status"] == "available"
 

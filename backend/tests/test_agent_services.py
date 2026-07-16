@@ -253,3 +253,46 @@ class TestAgentReportContract:
         }, None)
         assert result.is_valid is True
         assert result.cleaned_data.key_factors == ["阿根廷在既有数学路径中把握住了关键机会。"]
+
+    @pytest.mark.asyncio
+    async def test_tournament_report_retries_when_qwen_invents_wrong_year(self):
+        class WrongYearThenCorrectClient:
+            calls = 0
+            messages = []
+
+            async def chat_with_tools(self, messages, tools):
+                self.calls += 1
+                self.messages.append(messages)
+                year = "2023" if self.calls == 1 else "2026"
+                return DashScopeResponse(tool_calls=[ToolCall(
+                    id=f"submit-{self.calls}",
+                    name="submit_tournament_report",
+                    arguments={
+                        "champion_summary": f"这是 {year} 年世界杯冠军推演。",
+                        "group_stage_reasoning": ["小组赛结果来自数学模拟。"],
+                        "knockout_reasoning": ["淘汰赛路径来自数学模拟。"],
+                        "final_reasoning": "决赛结论不修改后端比分。",
+                        "key_factors": ["ELO 实力基线"],
+                        "event_analysis": [],
+                        "alternative_outcomes": ["代表路径不是唯一结果。"],
+                        "risk_notes": ["有限模拟次数存在抽样误差。"],
+                        "reasoning_chain": [{
+                            "step_number": 1,
+                            "finding": "读取赛事年份与冠军路径",
+                        }],
+                    },
+                )])
+
+        client = WrongYearThenCorrectClient()
+        report = await AgentService(qwen_client=client).analyze_tournament({
+            "simulation_id": "simulation-1",
+            "tournament_code": "world-cup-2026",
+            "tournament_name": "2026 世界杯",
+            "tournament_year": 2026,
+            "champion": {"name": "Argentina", "name_cn": "阿根廷"},
+        })
+
+        assert client.calls == 2
+        assert "2026 年的 2026 世界杯" in client.messages[0][1]["content"]
+        assert "2023" not in report["champion_summary"]
+        assert "2026" in report["champion_summary"]

@@ -164,8 +164,12 @@ class PredictionService:
             for match in stage["matches"]
         ]
         leader = response["summary"]["probability_leader"]
+        tournament = response["tournament"]
         return TournamentMathSummary(
             simulation_id=simulation.simulation_id,
+            tournament_code=tournament["code"],
+            tournament_name=tournament["name_cn"] or tournament["name"],
+            tournament_year=tournament["year"],
             scenario_type=response["scenario"]["type"],
             scenario_label=response["scenario"]["label"],
             champion=representative["champion"],

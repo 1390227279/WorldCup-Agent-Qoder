@@ -108,6 +108,9 @@ class TournamentReportRequest(BaseModel):
 
 class TournamentMathSummary(BaseModel):
     simulation_id: str
+    tournament_code: str
+    tournament_name: str
+    tournament_year: int
     scenario_type: Literal["BASELINE", "EVENT"]
     scenario_label: str
     champion: SimulationTeam
